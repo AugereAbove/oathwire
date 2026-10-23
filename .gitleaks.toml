@@ -1,0 +1,14 @@
+[extend]
+useDefault = true
+
+# Exact inert placeholder in the UI's curl example, including its original history.
+[[allowlists]]
+description = "Literal publishing-key placeholder; no real key is allowlisted"
+regexTarget = "match"
+regexes = ['''Authorization: Bearer YOUR_API_KEY''']
+
+[[allowlists]]
+description = "Public Frankfurt HTTP API pricing SKU from the anonymous AWS price list"
+targetRules = ["generic-api-key"]
+regexTarget = "match"
+regexes = ['''T5HBB5E3DWVQPUNF''']

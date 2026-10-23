@@ -175,7 +175,10 @@ export class Service {
       if (key.kind !== 'key') throw new AppError(404, 'NOT_FOUND', 'Key not found.');
       const p = await this.owned(key.projectId, owner);
       await this.store.commit([
-        write({ ...key, revoked: true }, key),
+        write(
+          { ...key, revoked: true, expiresAt: Math.floor(this.now() / 1000) + retentionSeconds },
+          key,
+        ),
         write({ ...p, keys: p.keys.filter((k) => k.id !== keyId) }, p),
       ]);
     });

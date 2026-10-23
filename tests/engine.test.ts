@@ -56,6 +56,31 @@ async function setup() {
   };
 }
 describe('delivery and recovery', () => {
+  it('leaves due work recoverable when the reconciliation time budget is exhausted', async () => {
+    const s = await setup();
+    await s.engine.reconcile(0);
+    expect(s.publish).not.toHaveBeenCalled();
+    expect((await s.store.due(s.now())).items).toHaveLength(1);
+    await s.engine.reconcile();
+    expect(s.publish).toHaveBeenCalledOnce();
+  });
+  it('recovers a successful HTTP response whose outcome could not be committed', async () => {
+    const s = await setup();
+    s.sender.mockImplementationOnce(async () => {
+      s.store.failNext = true;
+      return { status: 200 };
+    });
+    await expect(s.engine.process({ deliveryId: s.deliveryId, generation: 1 })).rejects.toThrow(
+      'INJECTED',
+    );
+    expect((await s.store.get<Delivery>(s.deliveryId))?.status).toBe('processing');
+    s.advance(31000);
+    await s.engine.reconcile();
+    await s.engine.process(s.jobs.at(-1)!);
+    expect((await s.store.get<Attempt>(s.deliveryId + '#1'))?.result).toBe('unknown');
+    expect((await s.store.get<Delivery>(s.deliveryId))?.status).toBe('delivered');
+    expect(s.sender).toHaveBeenCalledTimes(2);
+  });
   it('recovers acceptance without enqueue, signs requests and suppresses duplicates', async () => {
     const s = await setup();
     await s.engine.reconcile();

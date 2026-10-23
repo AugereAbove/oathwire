@@ -1,0 +1,142 @@
+[
+  {
+    "id": "Api",
+    "type": "AWS::Lambda::Function"
+  },
+  {
+    "id": "ApiHealthPermission",
+    "type": "AWS::Lambda::Permission"
+  },
+  {
+    "id": "ApiIngestionPermission",
+    "type": "AWS::Lambda::Permission"
+  },
+  {
+    "id": "ApiLogs",
+    "type": "AWS::Logs::LogGroup"
+  },
+  {
+    "id": "ApiManagementPermission",
+    "type": "AWS::Lambda::Permission"
+  },
+  {
+    "id": "ApiPreflightPermission",
+    "type": "AWS::Lambda::Permission"
+  },
+  {
+    "id": "ApiRole",
+    "type": "AWS::IAM::Role"
+  },
+  {
+    "id": "Budget",
+    "type": "AWS::Budgets::Budget"
+  },
+  {
+    "id": "Data",
+    "type": "AWS::DynamoDB::Table"
+  },
+  {
+    "id": "DeadLetterAlarm",
+    "type": "AWS::CloudWatch::Alarm"
+  },
+  {
+    "id": "DeadLetterQueue",
+    "type": "AWS::SQS::Queue"
+  },
+  {
+    "id": "Distribution",
+    "type": "AWS::CloudFront::Distribution"
+  },
+  {
+    "id": "Frontend",
+    "type": "AWS::S3::Bucket"
+  },
+  {
+    "id": "FrontendHeaders",
+    "type": "AWS::CloudFront::ResponseHeadersPolicy"
+  },
+  {
+    "id": "FrontendPolicy",
+    "type": "AWS::S3::BucketPolicy"
+  },
+  {
+    "id": "HttpApi",
+    "type": "AWS::ApiGatewayV2::Api"
+  },
+  {
+    "id": "HttpApiApiGatewayDefaultStage",
+    "type": "AWS::ApiGatewayV2::Stage"
+  },
+  {
+    "id": "InfrastructureFailureAlarm",
+    "type": "AWS::CloudWatch::Alarm"
+  },
+  {
+    "id": "InfrastructureFailureMetric",
+    "type": "AWS::Logs::MetricFilter"
+  },
+  {
+    "id": "OperationsTopic",
+    "type": "AWS::SNS::Topic"
+  },
+  {
+    "id": "OriginAccess",
+    "type": "AWS::CloudFront::OriginAccessControl"
+  },
+  {
+    "id": "Queue",
+    "type": "AWS::SQS::Queue"
+  },
+  {
+    "id": "QueueAgeAlarm",
+    "type": "AWS::CloudWatch::Alarm"
+  },
+  {
+    "id": "QueueTlsPolicy",
+    "type": "AWS::SQS::QueuePolicy"
+  },
+  {
+    "id": "Secrets",
+    "type": "AWS::DynamoDB::Table"
+  },
+  {
+    "id": "UserClient",
+    "type": "AWS::Cognito::UserPoolClient"
+  },
+  {
+    "id": "UserDomain",
+    "type": "AWS::Cognito::UserPoolDomain"
+  },
+  {
+    "id": "UserPool",
+    "type": "AWS::Cognito::UserPool"
+  },
+  {
+    "id": "Worker",
+    "type": "AWS::Lambda::Function"
+  },
+  {
+    "id": "WorkerErrorAlarm",
+    "type": "AWS::CloudWatch::Alarm"
+  },
+  {
+    "id": "WorkerJobs",
+    "type": "AWS::Lambda::EventSourceMapping"
+  },
+  {
+    "id": "WorkerLogs",
+    "type": "AWS::Logs::LogGroup"
+  },
+  {
+    "id": "WorkerReconcile",
+    "type": "AWS::Events::Rule"
+  },
+  {
+    "id": "WorkerReconcilePermission",
+    "type": "AWS::Lambda::Permission"
+  },
+  {
+    "id": "WorkerRole",
+    "type": "AWS::IAM::Role"
+  }
+]

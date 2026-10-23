@@ -73,6 +73,22 @@ describe('durable acceptance', () => {
   });
 });
 describe('HTTP boundary', () => {
+  it('rejects compressed input before invoking publishing logic', async () => {
+    const { service } = await setup();
+    const app = createApp(
+      service,
+      async () => 'alice',
+      async () => {},
+      'http://localhost:5173',
+    );
+    const response = await request(app)
+      .post('/v1/events')
+      .set('Content-Type', 'application/json')
+      .set('Content-Encoding', 'gzip')
+      .send('compressed');
+    expect(response.status).toBe(415);
+    expect(response.body.error.code).toBe('UNSUPPORTED_ENCODING');
+  });
   it('rejects malformed bodies, wrong content types, large requests and foreign resource access', async () => {
     const { service, key, project } = await setup();
     const app = createApp(

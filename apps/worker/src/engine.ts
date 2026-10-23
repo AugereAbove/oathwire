@@ -200,13 +200,18 @@ export class Engine {
     });
     if (next.status === 'retrying') await this.enqueue(next.pk);
   }
-  async reconcile() {
+  async reconcile(budgetMs = 12000) {
+    const deadline = this.now() + budgetMs;
     let cursor: string | undefined;
     let processed = 0;
     // Bound each invocation. Due ordering leaves recovered rows out of subsequent pages.
     for (let page = 0; page < 5; page++) {
       const batch = await this.store.due(this.now(), cursor);
       for (const row of batch.items) {
+        if (this.now() >= deadline) {
+          log('reconciliation_deferred', { processed });
+          return;
+        }
         try {
           const d = await this.store.get<Delivery>(row.pk);
           if (!d || terminal(d.status) || (d.workAt ?? Infinity) > this.now()) continue;

@@ -1,0 +1,10 @@
+version = 0.1
+
+[default.global.parameters]
+region = "eu-central-1"
+stack_name = "oathwire-beta"
+
+[default.deploy.parameters]
+confirm_changeset = true
+no_execute_changeset = true
+capabilities = "CAPABILITY_IAM"

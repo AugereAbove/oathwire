@@ -70,7 +70,10 @@ export function publicAddress(address: string): boolean {
   try {
     const addr = ipaddr.parse(address);
     // Mapped IPv6 and transition ranges are deliberately rejected.
-    return addr.range() === 'unicast';
+    return (
+      addr.range() === 'unicast' &&
+      (addr.kind() === 'ipv4' || addr.match(ipaddr.parse('2000::'), 3))
+    );
   } catch {
     return false;
   }

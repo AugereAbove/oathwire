@@ -6,6 +6,8 @@ Oathwire accepts events and delivers signed HTTPS webhooks through a persistent 
 
 **Status:** implemented and locally tested; not yet deployed or verified against live AWS. See [verification](docs/verification.md) for evidence and remaining acceptance checks. Do not treat this as a production service yet.
 
+The [pre-deployment audit](docs/pre-deployment-audit.md) inventories the AWS resources, models Frankfurt costs, and records readiness. Deployment is on hold; the workflow only prepares a change set for review after separate owner authorization.
+
 - Cognito hosted sign-in with Authorization Code and PKCE.
 - Owned projects, destination subscriptions, hashed publishing keys and revocation.
 - Atomic event acceptance, project-scoped idempotency and daily quotas.

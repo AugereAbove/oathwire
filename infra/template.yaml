@@ -17,6 +17,16 @@ Parameters:
     Type: Number
     Default: 30
     MinValue: 1
+  DataMaxReadUnits:
+    Type: Number
+    Default: 100
+    MinValue: 1
+    MaxValue: 1000
+  DataMaxWriteUnits:
+    Type: Number
+    Default: 100
+    MinValue: 1
+    MaxValue: 1000
 Globals:
   Function:
     Runtime: nodejs24.x
@@ -33,6 +43,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       BillingMode: PAY_PER_REQUEST
+      OnDemandThroughput:
+        MaxReadRequestUnits: !Ref DataMaxReadUnits
+        MaxWriteRequestUnits: !Ref DataMaxWriteUnits
       AttributeDefinitions:
         - { AttributeName: pk, AttributeType: S }
         - { AttributeName: listPk, AttributeType: S }
@@ -44,14 +57,29 @@ Resources:
       KeySchema: [{ AttributeName: pk, KeyType: HASH }]
       GlobalSecondaryIndexes:
         - IndexName: Listing
+          OnDemandThroughput:
+            {
+              MaxReadRequestUnits: !Ref DataMaxReadUnits,
+              MaxWriteRequestUnits: !Ref DataMaxWriteUnits,
+            }
           KeySchema:
             [{ AttributeName: listPk, KeyType: HASH }, { AttributeName: listSk, KeyType: RANGE }]
           Projection: { ProjectionType: ALL }
         - IndexName: Work
+          OnDemandThroughput:
+            {
+              MaxReadRequestUnits: !Ref DataMaxReadUnits,
+              MaxWriteRequestUnits: !Ref DataMaxWriteUnits,
+            }
           KeySchema:
             [{ AttributeName: workPk, KeyType: HASH }, { AttributeName: workAt, KeyType: RANGE }]
           Projection: { ProjectionType: KEYS_ONLY }
         - IndexName: DestinationHistory
+          OnDemandThroughput:
+            {
+              MaxReadRequestUnits: !Ref DataMaxReadUnits,
+              MaxWriteRequestUnits: !Ref DataMaxWriteUnits,
+            }
           KeySchema:
             [
               { AttributeName: destinationPk, KeyType: HASH },
@@ -59,24 +87,30 @@ Resources:
             ]
           Projection: { ProjectionType: ALL }
       TimeToLiveSpecification: { AttributeName: expiresAt, Enabled: true }
-      SSESpecification: { SSEEnabled: true }
+      # AWS-owned encryption at rest; selecting true uses a billable AWS-managed KMS key.
+      SSESpecification: { SSEEnabled: false }
       PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: false }
   Secrets:
     Type: AWS::DynamoDB::Table
     Properties:
       BillingMode: PAY_PER_REQUEST
+      OnDemandThroughput: { MaxReadRequestUnits: 20, MaxWriteRequestUnits: 20 }
       AttributeDefinitions: [{ AttributeName: pk, AttributeType: S }]
       KeySchema: [{ AttributeName: pk, KeyType: HASH }]
-      SSESpecification: { SSEEnabled: true }
+      SSESpecification: { SSEEnabled: false }
   DeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
       MessageRetentionPeriod: 1209600
+      MaximumMessageSize: 1024
+      ReceiveMessageWaitTimeSeconds: 20
       SqsManagedSseEnabled: true
   Queue:
     Type: AWS::SQS::Queue
     Properties:
       VisibilityTimeout: 120
+      MaximumMessageSize: 1024
+      ReceiveMessageWaitTimeSeconds: 20
       MessageRetentionPeriod: 345600
       SqsManagedSseEnabled: true
       RedrivePolicy: { deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn, maxReceiveCount: 5 }
@@ -84,6 +118,7 @@ Resources:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: !Sub '${AWS::StackName}-users'
+      UserPoolTier: LITE
       AdminCreateUserConfig: { AllowAdminCreateUserOnly: true }
       UsernameAttributes: [email]
       AutoVerifiedAttributes: [email]
@@ -117,7 +152,7 @@ Resources:
       TokenValidityUnits: { AccessToken: minutes, IdToken: minutes, RefreshToken: days }
   UserDomain:
     Type: AWS::Cognito::UserPoolDomain
-    Properties: { Domain: !Ref AuthDomainPrefix, UserPoolId: !Ref UserPool }
+    Properties: { Domain: !Ref AuthDomainPrefix, UserPoolId: !Ref UserPool, ManagedLoginVersion: 1 }
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -137,22 +172,13 @@ Resources:
       CodeUri: ../dist/
       Handler: api.handler
       ReservedConcurrentExecutions: 3
+      LoggingConfig: { LogGroup: !Ref ApiLogs }
       Environment:
         Variables:
           COGNITO_USER_POOL_ID: !Ref UserPool
           COGNITO_CLIENT_ID: !Ref UserClient
           WEB_ORIGIN: !Ref WebOrigin
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:ConditionCheckItem]
-              Resource: [!GetAtt Data.Arn, !GetAtt Secrets.Arn]
-            - Effect: Allow
-              Action: dynamodb:Query
-              Resource: !Sub '${Data.Arn}/index/*'
-            - Effect: Allow
-              Action: sqs:SendMessage
-              Resource: !GetAtt Queue.Arn
+      Role: !GetAtt ApiRole.Arn
       Events:
         Management:
           Type: HttpApi
@@ -180,20 +206,8 @@ Resources:
       CodeUri: ../dist/
       Handler: worker.handler
       ReservedConcurrentExecutions: 3
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:ConditionCheckItem]
-              Resource: !GetAtt Data.Arn
-            - Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:ConditionCheckItem]
-              Resource: !GetAtt Secrets.Arn
-            - Effect: Allow
-              Action: dynamodb:Query
-              Resource: !Sub '${Data.Arn}/index/Work'
-            - Effect: Allow
-              Action: sqs:SendMessage
-              Resource: !GetAtt Queue.Arn
+      LoggingConfig: { LogGroup: !Ref WorkerLogs }
+      Role: !GetAtt WorkerRole.Arn
       Events:
         Jobs:
           Type: SQS
@@ -207,10 +221,96 @@ Resources:
           Properties: { Schedule: 'rate(1 minute)', Enabled: true }
   ApiLogs:
     Type: AWS::Logs::LogGroup
-    Properties: { LogGroupName: !Sub '/aws/lambda/${Api}', RetentionInDays: 7 }
+    Properties: { LogGroupName: !Sub '/oathwire/${AWS::StackName}/api', RetentionInDays: 7 }
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: OathwireApi
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:ConditionCheckItem]
+                Resource: [!GetAtt Data.Arn, !GetAtt Secrets.Arn]
+              - Effect: Allow
+                Action: dynamodb:Query
+                Resource:
+                  [!Sub '${Data.Arn}/index/Listing', !Sub '${Data.Arn}/index/DestinationHistory']
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt Queue.Arn
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/oathwire/${AWS::StackName}/api:log-stream:*'
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: OathwireWorker
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:ConditionCheckItem]
+                Resource: !GetAtt Data.Arn
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:ConditionCheckItem]
+                Resource: !GetAtt Secrets.Arn
+              - Effect: Allow
+                Action: dynamodb:Query
+                Resource: !Sub '${Data.Arn}/index/Work'
+              - Effect: Allow
+                Action:
+                  [sqs:SendMessage, sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
+                Resource: !GetAtt Queue.Arn
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/oathwire/${AWS::StackName}/worker:log-stream:*'
   WorkerLogs:
     Type: AWS::Logs::LogGroup
-    Properties: { LogGroupName: !Sub '/aws/lambda/${Worker}', RetentionInDays: 7 }
+    Properties: { LogGroupName: !Sub '/oathwire/${AWS::StackName}/worker', RetentionInDays: 7 }
+  InfrastructureFailureMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref WorkerLogs
+      FilterPattern: '{ ($.action = "reconciliation_item_failed") || ($.action = "queue_processing_failed") }'
+      MetricTransformations:
+        - MetricNamespace: !Sub 'Oathwire/${AWS::StackName}'
+          MetricName: InfrastructureFailures
+          MetricValue: '1'
+  InfrastructureFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      Namespace: !Sub 'Oathwire/${AWS::StackName}'
+      MetricName: InfrastructureFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationsTopic]
+  QueueTlsPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref Queue, !Ref DeadLetterQueue]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: sqs:*
+            Resource: [!GetAtt Queue.Arn, !GetAtt DeadLetterQueue.Arn]
+            Condition: { Bool: { 'aws:SecureTransport': false } }
   Frontend:
     Type: AWS::S3::Bucket
     Properties:

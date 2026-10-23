@@ -10,3 +10,8 @@ coverage/
 .playwright-cli/
 output/
 dynamodb-local-metadata.json
+**/.aws/
+*.pem
+*.key
+*.p12
+samconfig.local.toml

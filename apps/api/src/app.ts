@@ -95,7 +95,7 @@ export function createApp(
       throw new AppError(415, 'UNSUPPORTED_CONTENT_TYPE', 'Use application/json.');
     next();
   });
-  app.use(express.json({ limit: '16kb', strict: true }));
+  app.use(express.json({ limit: '16kb', strict: true, inflate: false }));
   app.post('/v1/events', async (req, res) => {
     const event = await service.publish(bearer(req), req.body, req.get('idempotency-key'));
     console.info(

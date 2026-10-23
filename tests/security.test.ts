@@ -42,6 +42,10 @@ describe('security boundaries', () => {
     '::ffff:8.8.8.8',
     '2001:db8::1',
     '2002:0808:0808::',
+    '4000::1',
+    '3fff::1',
+    '64:ff9b::808:808',
+    '192.0.2.1',
   ])('rejects blocked address %s', (ip) => {
     expect(publicAddress(ip)).toBe(false);
   });

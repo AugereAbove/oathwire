@@ -11,6 +11,9 @@ Executed locally:
 - SAM `validate --lint` and local artifact build.
 - Edge/Playwright inspection of the unconfigured landing page at desktop and mobile sizes. This is not an authenticated AWS dashboard test.
 - npm audit of installed dependencies.
+- [GitHub Actions CI](https://github.com/AugereAbove/oathwire/actions/runs/39967921252) passed for commit `fa9f987`: clean npm install, all 51 tests including DynamoDB Local, lint, typechecks, production builds, formatting, SAM lint validation and SAM artifact build on Linux.
+- Both bundled Lambda handlers loaded successfully under Node 24 with placeholder resource configuration; this verifies bundle loading, not AWS access.
+- Fresh Edge browser session reported no console errors. At 390 px viewport width, the page content width was also 390 px with the integration example expanded.
 
 The test command requires `DYNAMODB_LOCAL_URL=http://localhost:8000` to include SDK integration. The test-only memory adapter is never used by a production entry point. Transport tests stub HTTPS responses; DynamoDB Local delivery tests use an injected receiver. These do not establish live network delivery.
 
@@ -19,7 +22,6 @@ Not yet verified:
 - AWS deployment, IAM correctness at runtime, Cognito invitation/sign-in/recovery and CloudFront callback behavior.
 - Actual SQS event source processing, scheduled AWS recovery and DLQ alarms.
 - Public HTTPS receiver delivery with signature verification, outage recovery and replay in AWS.
-- GitHub Actions result until the repository run completes.
 - Account-specific OIDC deployment policies and billing notification receipt.
 - Load testing (requires an approved budget).
 

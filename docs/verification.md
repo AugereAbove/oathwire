@@ -16,6 +16,7 @@ Executed locally:
 - Fresh Edge browser session reported no console errors. At 390 px viewport width, the page content width was also 390 px with the integration example expanded.
 - Pre-deployment audit: clean install, current dependency audit (zero vulnerabilities), offline SAM expansion/guard assertions, SAM lint/build, checksum-verified Gitleaks all-ref and current first-party scans. Two explicit false positives (an inert publishing-key placeholder and public AWS pricing SKU) were narrowly excepted; no real secrets were detected.
 - Current region/rate/source evidence and modeled costs are in `cost-model.json`; the full 35-resource inventory and readiness distinctions are in `pre-deployment-audit.md`. No AWS change set or resource has been created during this audit.
+- [Audited-commit CI](https://github.com/AugereAbove/oathwire/actions/runs/39999859441) passed for `a9bc8f6`: clean install, all 58 tests with DynamoDB Local, lint/typechecks/builds, formatting, SAM validation/build and offline infrastructure assertions on Linux.
 
 The test command requires `DYNAMODB_LOCAL_URL=http://localhost:8000` to include SDK integration. The test-only memory adapter is never used by a production entry point. Transport tests stub HTTPS responses; DynamoDB Local delivery tests use an injected receiver. These do not establish live network delivery.
 

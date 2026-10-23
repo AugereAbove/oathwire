@@ -1,6 +1,5 @@
 import { Conflict, type Row } from '../packages/shared/src/model.js';
 import type { Store, Write, Page } from '../packages/shared/src/store.js';
-// Test adapter only; production never falls back to process-local data.
 export class MemoryStore implements Store {
   rows = new Map<string, Row>();
   failNext = false;

@@ -87,7 +87,6 @@ Resources:
             ]
           Projection: { ProjectionType: ALL }
       TimeToLiveSpecification: { AttributeName: expiresAt, Enabled: true }
-      # AWS-owned encryption at rest; selecting true uses a billable AWS-managed KMS key.
       SSESpecification: { SSEEnabled: false }
       PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: false }
   Secrets:

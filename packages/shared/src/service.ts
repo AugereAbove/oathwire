@@ -101,7 +101,6 @@ export class Service {
     return optimistic(async () => {
       const p = await this.owned(projectId, owner);
       this.active(p);
-      // Retired configurations count toward the cap to bound metadata and history.
       if (p.destinations.length >= 5)
         throw new AppError(
           429,
@@ -201,7 +200,7 @@ export class Service {
     if (Buffer.byteLength(JSON.stringify(input)) > 16384)
       throw new AppError(413, 'PAYLOAD_TOO_LARGE', 'Payload exceeds 16 KiB.');
     if (idem !== undefined && !/^[\x21-\x7e]{1,128}$/.test(idem))
-      throw new AppError(400, 'INVALID_IDEMPOTENCY_KEY', 'Use 1–128 visible ASCII characters.');
+      throw new AppError(400, 'INVALID_IDEMPOTENCY_KEY', 'Use 1 to 128 visible ASCII characters.');
     const requestHash = hash(canonical(parsed.data));
     return optimistic(async () => {
       const key = await this.store.get<ApiKey>('key_' + hash(token));

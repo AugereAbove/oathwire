@@ -105,7 +105,6 @@ export function createApp(
         matchedDestinations: event.matchedDestinations,
       }),
     );
-    // Publication is an optimization; the transaction already contains durable due work.
     await Promise.all(
       event.deliveryIds.map(async (id) => {
         try {

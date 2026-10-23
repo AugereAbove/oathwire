@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { afterEach, beforeEach, it, expect, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -16,7 +15,7 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/');
 });
 afterEach(cleanup);
-it('offers hosted sign-in without inventing activity', async () => {
+it('starts hosted sign in without fetching project data', async () => {
   mocks.getUser.mockResolvedValue(null);
   render(<App />);
   await userEvent.click(await screen.findByRole('button', { name: /Sign in to Oathwire/ }));
@@ -49,7 +48,7 @@ it('creates an owned project through the API and renders the empty console', asy
   );
   expect(await screen.findByText('No events in this page.')).toBeTruthy();
 });
-it('shows an API error instead of a fabricated dashboard', async () => {
+it('displays the API error when project loading fails', async () => {
   mocks.getUser.mockResolvedValue({ expired: false });
   mocks.api.mockRejectedValue(new Error('The service is temporarily unavailable.'));
   render(<App />);

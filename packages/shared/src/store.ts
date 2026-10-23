@@ -76,7 +76,6 @@ export class DynamoStore implements Store {
         }),
       );
     } catch (e) {
-      // Only conditional conflicts are retried; throttles and invalid transactions remain visible.
       if (
         e &&
         typeof e === 'object' &&

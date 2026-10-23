@@ -12,7 +12,6 @@ export type Sender = (
   headers: Record<string, string>,
 ) => Promise<HttpResult>;
 export const send: Sender = async (url, body, headers) => {
-  // The absolute deadline includes DNS, connection, TLS and response headers.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
@@ -38,13 +37,12 @@ export const send: Sender = async (url, body, headers) => {
           family: selected.family,
           signal: controller.signal,
           headers: { ...headers, 'Content-Length': String(Buffer.byteLength(body)) },
-          // A new socket uses only this validated address; hostname is retained for SNI/cert checks.
           lookup: (_hostname, _options, callback) =>
             callback(null, selected.address, selected.family),
         },
         (res) => {
           resolve({ status: res.statusCode, retryAfter: res.headers['retry-after'] });
-          res.destroy(); // No endpoint response body is needed or persisted.
+          res.destroy();
         },
       );
       req.on('error', (e: NodeJS.ErrnoException) =>

@@ -248,7 +248,7 @@ function Console() {
                 Copy
               </button>
               <button className="subtle" onClick={() => setSecret('')}>
-                I saved it — close
+                I saved it. Close
               </button>
             </div>
           </section>

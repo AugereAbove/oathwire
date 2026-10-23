@@ -17,7 +17,7 @@ Management routes use `Authorization: Bearer <Cognito access token>`. Publishing
 | GET, POST          | `/v1/projects/{id}/keys`              | Active metadata / create `{label}`, returns `key` once |
 | DELETE             | `/v1/keys/{id}`                       | Revoke immediately                                     |
 | POST               | `/v1/events`                          | Publish `{type,data}` using project API key            |
-| GET                | `/v1/projects/{id}/events`            | History with `type`, `hours` (1–168; default 24)       |
+| GET                | `/v1/projects/{id}/events`            | History with `type`, `hours` (1 to 168; default 24)    |
 | GET                | `/v1/events/{id}`                     | Event with payload                                     |
 | GET                | `/v1/events/{id}/deliveries`          | Original and replay deliveries                         |
 | GET                | `/v1/deliveries/{id}`                 | Delivery status and schedule                           |
@@ -25,7 +25,7 @@ Management routes use `Authorization: Bearer <Cognito access token>`. Publishing
 | POST               | `/v1/deliveries/{id}/replay`          | `{}` plus required Idempotency-Key                     |
 | GET                | `/v1/projects/{id}/stats`             | Bounded recent sample with explicit scope              |
 
-Objects expose `id`. Lists return `{items: [...], cursor?: "..."}`. Pass the returned opaque `cursor` query parameter to read the next page. Event filtering happens within each page; continue even if a filtered page is empty. Archive is irreversible. Retired configurations count toward the five-destination cap. There is no URL mutation endpoint.
+Objects expose `id`. Lists return `{items: [...], cursor?: "..."}`. Pass the returned opaque `cursor` query parameter to read the next page. Event filtering happens within each page; continue even if a filtered page is empty. Archive is irreversible. Retired configurations count toward the limit of five destinations. There is no URL mutation endpoint.
 
 ## Publishing
 
@@ -38,7 +38,7 @@ Idempotency-Key: order-1842
 {"type":"order.created","data":{"orderId":"1842"}}
 ```
 
-Event types contain 1–100 ASCII letters, digits, dots, underscores or hyphens, starting with a letter or digit. `data` must be an object. Additional envelope fields and JSON nesting beyond 16 levels are rejected. Destination `eventTypes` is either `["*"]` or an exact-name list.
+Event types contain 1 to 100 ASCII letters, digits, dots, underscores or hyphens, starting with a letter or digit. `data` must be an object. Additional envelope fields and JSON nesting beyond 16 levels are rejected. Destination `eventTypes` is either `["*"]` or a list of exact event names.
 
 A successful response is HTTP 202:
 
@@ -51,7 +51,7 @@ A successful response is HTTP 202:
 }
 ```
 
-These placeholders are illustrative, not actual service identifiers. Same project + idempotency key + canonical payload returns the original response for seven days; different payload returns 409. Keys are 1–128 visible ASCII characters. Do not put secrets in them. Automatic retry delays are 10, 30, 90, 300 and 900 seconds after the preceding attempt. Scheduling/reconciliation can make observed waits longer.
+These placeholders are illustrative, not actual service identifiers. Same project + idempotency key + canonical payload returns the original response for seven days; different payload returns 409. Keys are 1 to 128 visible ASCII characters. Do not put secrets in them. Automatic retry delays are 10, 30, 90, 300 and 900 seconds after the preceding attempt. Scheduling/reconciliation can make observed waits longer.
 
 Errors use `{"error":{"code":"INVALID_EVENT","message":"..."}}`. Statuses: 400 malformed JSON/parameters, 401 unauthenticated, 403 disabled project, 404 missing/inaccessible, 409 conflict, 413 oversized, 415 wrong content type, 422 invalid fields, 429 quota/limit and 503 infrastructure failure/concurrent contention. No stacks or raw AWS errors are returned.
 
@@ -64,6 +64,6 @@ The worker POSTs the exact JSON bytes of `{id,type,created_at,data}` and sends:
 - `X-Oathwire-Timestamp` (Unix seconds).
 - `X-Oathwire-Signature: v1=<hex HMAC-SHA256>`.
 
-Compute HMAC over `timestamp + "." + rawBody`, before parsing JSON. [The example receiver](../examples/receiver.ts) uses the tested timing-safe verifier, five-minute timestamp tolerance and a small duplicate set for demonstration. A real receiver must persist deduplication atomically with its business effect. Automatic retries preserve the delivery ID. Replay has a fresh ID and a reference to the failed original in Oathwire's history.
+Compute HMAC over `timestamp + "." + rawBody`, before parsing JSON. [The example receiver](../examples/receiver.ts) uses the tested constant time verifier, timestamp tolerance of five minutes and a small duplicate set for demonstration. A real receiver must persist deduplication atomically with its business effect. Automatic retries preserve the delivery ID. Replay has a fresh ID and a reference to the failed original in Oathwire's history.
 
 Signing secrets are random strings used directly as HMAC keys; do not base64-decode them. Rotation affects new claims immediately. Reject missing/malformed signatures and stale timestamps. A 2xx response acknowledges receipt; it cannot prove downstream work completed. Redirects are failures and never followed.

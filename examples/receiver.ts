@@ -25,7 +25,6 @@ const server = createServer(async (req, res) => {
     res.writeHead(401).end();
     return;
   }
-  // Restart with RECEIVER_STATUS=503 for controlled outage/retry demonstrations.
   const status = Number(process.env.RECEIVER_STATUS ?? 200);
   if (status !== 200) {
     res.writeHead(status).end();
@@ -37,7 +36,7 @@ const server = createServer(async (req, res) => {
     return;
   }
   if (!seen.has(id)) {
-    if (seen.size >= 10000) seen.clear(); // Demo only. Use durable atomic deduplication in your application.
+    if (seen.size >= 10000) seen.clear();
     seen.add(id);
     console.log(JSON.stringify({ action: 'verified_webhook', deliveryId: id }));
   }

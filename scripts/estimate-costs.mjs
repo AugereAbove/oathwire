@@ -1,6 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
-// List-price model, not a performance benchmark or a bill guarantee.
 const region = 'eu-central-1';
 const selections = {
   lambdaGbSecond: ['AWSLambda', '6PPNGCBXY95TENXZ'],

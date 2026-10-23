@@ -2,15 +2,15 @@
 
 **Every event. Accounted for.**
 
-Oathwire accepts events and delivers signed HTTPS webhooks through a persistent queue. It records delivery attempts, retries temporary endpoint failures, and lets the owner replay failed deliveries. It is an invitation-only developer infrastructure project, built to stay understandable for one maintainer.
+Oathwire accepts events and delivers signed HTTPS webhooks through a persistent queue. It records delivery attempts, retries temporary endpoint failures, and lets the owner replay failed deliveries. Access is by invitation.
 
 **Status:** implemented and locally tested; not yet deployed or verified against live AWS. See [verification](docs/verification.md) for evidence and remaining acceptance checks. Do not treat this as a production service yet.
 
-The [pre-deployment audit](docs/pre-deployment-audit.md) inventories the AWS resources, models Frankfurt costs, and records readiness. Deployment is on hold; the workflow only prepares a change set for review after separate owner authorization.
+The [pre deployment audit](docs/pre-deployment-audit.md) inventories the AWS resources, models Frankfurt costs, and records readiness. Deployment is on hold; the workflow only prepares a change set for review after separate owner authorization.
 
-- Cognito hosted sign-in with Authorization Code and PKCE.
+- Cognito hosted sign in with Authorization Code and PKCE.
 - Owned projects, destination subscriptions, hashed publishing keys and revocation.
-- Atomic event acceptance, project-scoped idempotency and daily quotas.
+- Atomic event acceptance, idempotency per project and daily quotas.
 - SQS delivery jobs, conditional leases, bounded retries and scheduled recovery.
 - HMAC-SHA256 signatures, pinned public DNS resolution and no redirects.
 - React dashboard with event, delivery and attempt history; manual replay.
@@ -40,7 +40,7 @@ npm run check
 npm run dev:web
 ```
 
-The unconfigured frontend shows a setup notice. It does not fabricate projects or authenticate a local test user.
+Without configuration, the frontend displays a setup notice. Connect Cognito and the API before signing in.
 
 Copy `.env.example` to `.env` and set the AWS resources and Cognito values described in [deployment](docs/deployment.md). To run the local API against those resources:
 
@@ -66,7 +66,7 @@ HTTP 202 means the event and delivery work were stored. It does not mean a recei
 
 ## Tests
 
-`npm test` runs security, service, failure-injection and React tests without AWS credentials. The DynamoDB SDK integration test is skipped unless `DYNAMODB_LOCAL_URL` is set. CI enables it using DynamoDB Local.
+`npm test` runs security, service, failure recovery and React tests without AWS credentials. The DynamoDB SDK integration test is skipped unless `DYNAMODB_LOCAL_URL` is set. CI enables it using DynamoDB Local.
 
 To run it locally, start the official [DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html) image or Java distribution on port 8000, then:
 
@@ -75,12 +75,12 @@ $env:DYNAMODB_LOCAL_URL='http://localhost:8000'
 npm run check
 ```
 
-Integration tests use dummy credentials, reject non-loopback endpoints, and create/delete only uniquely named test tables. They never fall back to AWS.
+Integration tests use dummy credentials, reject endpoints outside loopback, and create/delete only uniquely named test tables. They never fall back to AWS.
 
 ## Deploying and operating
 
 Read [deployment](docs/deployment.md) before creating paid resources. Deployment is manual and requires an approved AWS account, OIDC role, and budget email. [API reference](docs/api.md), [architecture](docs/architecture.md), and a [controlled receiver](examples/receiver.ts) explain the flow.
 
-Current limits: three projects including archives, five destination configurations including retired entries, three active keys per project, 16 KiB per event, 1,000 events per UTC day, six attempts, and seven-day history. Replays are limited to five per project per minute. Dashboard statistics cover a bounded recent sample, not lifetime traffic. There is no billing, team model, arbitrary filtering, payload transformation, or custom request headers.
+Current limits: three projects including archives, five destination configurations including retired entries, three active keys per project, 16 KiB per event, 1,000 events per UTC day, six attempts, and seven days of history. Replays are limited to five per project per minute. Dashboard statistics cover a bounded recent sample, not lifetime traffic. There is no billing, team model, arbitrary filtering, payload transformation, or custom request headers.
 
 MIT licensed; see [LICENSE](LICENSE).

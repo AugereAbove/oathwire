@@ -44,7 +44,6 @@ export class Engine {
       { deliveryId: d.pk, generation: d.generation },
       Math.ceil((d.nextAttemptAt - this.now()) / 1000),
     );
-    // Never change the generation after publication: a fast worker may already have claimed it.
     try {
       await this.store.commit([
         write(
@@ -151,7 +150,6 @@ export class Engine {
       lastErrorCode:
         result.code ?? (classification === 'delivered' ? undefined : 'HTTP_' + result.status),
     };
-    // A response after lease expiry cannot overwrite recovery by another worker.
     if (finished > claimed.leaseExpiresAt!) return;
     if (classification === 'delivered') next.status = 'delivered';
     else if (classification === 'retryable' && next.attemptCount < 6) {
@@ -204,7 +202,6 @@ export class Engine {
     const deadline = this.now() + budgetMs;
     let cursor: string | undefined;
     let processed = 0;
-    // Bound each invocation. Due ordering leaves recovered rows out of subsequent pages.
     for (let page = 0; page < 5; page++) {
       const batch = await this.store.due(this.now(), cursor);
       for (const row of batch.items) {

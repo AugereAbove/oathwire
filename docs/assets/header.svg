@@ -1,0 +1,57 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1200"
+  height="300"
+  viewBox="0 0 1200 300"
+  role="img"
+  aria-labelledby="title description"
+>
+  <title id="title">Oathwire</title>
+  <desc id="description">
+    Every event. Accounted for. A graphite banner with a blue delivery path and the Oathwire mark.
+  </desc>
+  <rect
+    x="1"
+    y="1"
+    width="1198"
+    height="298"
+    rx="16"
+    fill="#101114"
+    stroke="#2b2e35"
+    stroke-width="2"
+  />
+  <path
+    d="M66 75V43h23v32h23V43"
+    fill="none"
+    stroke="#8ba8d8"
+    stroke-width="5"
+    stroke-linecap="square"
+  />
+  <text
+    x="64"
+    y="169"
+    fill="#f1f2f4"
+    font-family="Segoe UI, Arial, sans-serif"
+    font-size="84"
+    font-weight="600"
+    letter-spacing="5"
+  >
+    OATHWIRE
+  </text>
+  <text x="68" y="224" fill="#9ca3af" font-family="Segoe UI, Arial, sans-serif" font-size="30">
+    Every event. Accounted for.
+  </text>
+  <path
+    d="M738 150h82c28 0 28-56 56-56h76c28 0 28 112 56 112h92"
+    fill="none"
+    stroke="#2b2e35"
+    stroke-width="3"
+  />
+  <path d="M738 150h82c28 0 28-56 56-56h76" fill="none" stroke="#8ba8d8" stroke-width="3" />
+  <g fill="#101114" stroke="#8ba8d8" stroke-width="3">
+    <circle cx="738" cy="150" r="9" />
+    <circle cx="914" cy="94" r="9" />
+    <circle cx="1100" cy="206" r="9" />
+  </g>
+  <path d="m1095 206 4 4 7-8" fill="none" stroke="#8ba8d8" stroke-width="2" />
+</svg>

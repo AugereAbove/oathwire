@@ -1,6 +1,6 @@
-# Oathwire
+![Oathwire. Every event. Accounted for.](docs/assets/header.svg)
 
-**Every event. Accounted for.**
+# Oathwire
 
 Oathwire accepts events and delivers signed HTTPS webhooks through a persistent queue. It records delivery attempts, retries temporary endpoint failures, and lets the owner replay failed deliveries. Access is by invitation.
 

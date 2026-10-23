@@ -1,0 +1,74 @@
+name: Deploy approved beta
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: oathwire-beta-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: eu-central-1
+      STACK_NAME: oathwire-beta
+      WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
+      AUTH_DOMAIN_PREFIX: ${{ vars.AUTH_DOMAIN_PREFIX }}
+      BUDGET_EMAIL: ${{ vars.BUDGET_EMAIL }}
+      ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+      CF_EXECUTION_ROLE_ARN: ${{ vars.CF_EXECUTION_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run check
+      - uses: aws-actions/setup-sam@v2
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+      - name: Validate configuration and deploy infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in WEB_ORIGIN AUTH_DOMAIN_PREFIX BUDGET_EMAIL ARTIFACT_BUCKET CF_EXECUTION_ROLE_ARN; do
+            test -n "${!key}" || { echo "Missing environment variable: $key"; exit 1; }
+          done
+          sam validate --lint --template-file infra/template.yaml
+          sam build --template-file infra/template.yaml
+          sam deploy --template-file .aws-sam/build/template.yaml --stack-name "$STACK_NAME" \
+            --s3-bucket "$ARTIFACT_BUCKET" --s3-prefix oathwire-beta \
+            --role-arn "$CF_EXECUTION_ROLE_ARN" --capabilities CAPABILITY_IAM \
+            --parameter-overrides "WebOrigin=$WEB_ORIGIN" "AuthDomainPrefix=$AUTH_DOMAIN_PREFIX" "BudgetEmail=$BUDGET_EMAIL" \
+            --no-fail-on-empty-changeset
+      - name: Read public frontend configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          outputs=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs' --output json)
+          value() { jq -r --arg k "$1" '.[] | select(.OutputKey == $k) | .OutputValue' <<< "$outputs"; }
+          test "$(value WebUrl)" = "$WEB_ORIGIN" || { echo 'WEB_ORIGIN must match the deployed WebUrl. See bootstrap instructions.'; exit 1; }
+          {
+            echo "VITE_API_URL=$(value ApiUrl)"
+            echo "VITE_COGNITO_DOMAIN=$(value AuthDomain)"
+            echo "VITE_COGNITO_CLIENT_ID=$(value UserClientId)"
+            echo "VITE_COGNITO_ISSUER=https://cognito-idp.$AWS_REGION.amazonaws.com/$(value UserPoolId)"
+            echo "VITE_REDIRECT_URI=$WEB_ORIGIN/callback"
+            echo "FRONTEND_BUCKET=$(value FrontendBucket)"
+            echo "DISTRIBUTION_ID=$(value DistributionId)"
+          } >> "$GITHUB_ENV"
+      - name: Publish frontend and check public health
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build -w @oathwire/web
+          aws s3 sync apps/web/dist/ "s3://$FRONTEND_BUCKET/" --exclude index.html --cache-control 'public,max-age=31536000,immutable'
+          aws s3 cp apps/web/dist/index.html "s3://$FRONTEND_BUCKET/index.html" --cache-control 'no-cache,no-store,must-revalidate'
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths /index.html / /callback
+          curl --fail --retry 3 "$VITE_API_URL/health"
+          curl --fail --retry 3 "$WEB_ORIGIN/"
+          echo 'Public health passed. This does not verify signed webhook delivery; run the acceptance checklist.'

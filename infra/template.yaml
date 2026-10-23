@@ -1,0 +1,392 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Oathwire invitation-only webhook delivery beta
+Parameters:
+  WebOrigin:
+    Type: String
+    Description: Frontend origin, without trailing slash; use http://localhost:5173 for initial stack creation
+    Default: http://localhost:5173
+  AuthDomainPrefix:
+    Type: String
+    AllowedPattern: '[a-z0-9-]{1,63}'
+    Description: Globally unique Cognito hosted UI domain prefix
+  BudgetEmail:
+    Type: String
+    Description: Verified owner email for budget notifications
+  MonthlyBudget:
+    Type: Number
+    Default: 30
+    MinValue: 1
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    Architectures: [arm64]
+    MemorySize: 256
+    Timeout: 20
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref Data
+        SECRETS_TABLE_NAME: !Ref Secrets
+        QUEUE_URL: !Ref Queue
+Resources:
+  Data:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: listPk, AttributeType: S }
+        - { AttributeName: listSk, AttributeType: S }
+        - { AttributeName: workPk, AttributeType: S }
+        - { AttributeName: workAt, AttributeType: N }
+        - { AttributeName: destinationPk, AttributeType: S }
+        - { AttributeName: destinationSk, AttributeType: S }
+      KeySchema: [{ AttributeName: pk, KeyType: HASH }]
+      GlobalSecondaryIndexes:
+        - IndexName: Listing
+          KeySchema:
+            [{ AttributeName: listPk, KeyType: HASH }, { AttributeName: listSk, KeyType: RANGE }]
+          Projection: { ProjectionType: ALL }
+        - IndexName: Work
+          KeySchema:
+            [{ AttributeName: workPk, KeyType: HASH }, { AttributeName: workAt, KeyType: RANGE }]
+          Projection: { ProjectionType: KEYS_ONLY }
+        - IndexName: DestinationHistory
+          KeySchema:
+            [
+              { AttributeName: destinationPk, KeyType: HASH },
+              { AttributeName: destinationSk, KeyType: RANGE },
+            ]
+          Projection: { ProjectionType: ALL }
+      TimeToLiveSpecification: { AttributeName: expiresAt, Enabled: true }
+      SSESpecification: { SSEEnabled: true }
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: false }
+  Secrets:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{ AttributeName: pk, AttributeType: S }]
+      KeySchema: [{ AttributeName: pk, KeyType: HASH }]
+      SSESpecification: { SSEEnabled: true }
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+  Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy: { deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn, maxReceiveCount: 5 }
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-users'
+      AdminCreateUserConfig: { AllowAdminCreateUserOnly: true }
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      Policies:
+        PasswordPolicy:
+          {
+            MinimumLength: 12,
+            RequireLowercase: true,
+            RequireUppercase: true,
+            RequireNumbers: true,
+            RequireSymbols: true,
+          }
+      AccountRecoverySetting:
+        RecoveryMechanisms: [{ Name: verified_email, Priority: 1 }]
+  UserClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs: [!Sub '${WebOrigin}/callback']
+      LogoutURLs: [!Ref WebOrigin]
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 1
+      TokenValidityUnits: { AccessToken: minutes, IdToken: minutes, RefreshToken: days }
+  UserDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties: { Domain: !Ref AuthDomainPrefix, UserPoolId: !Ref UserPool }
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: '$default'
+      DefaultRouteSettings: { ThrottlingBurstLimit: 20, ThrottlingRateLimit: 10 }
+      Auth:
+        DefaultAuthorizer: Cognito
+        Authorizers:
+          Cognito:
+            IdentitySource: '$request.header.Authorization'
+            JwtConfiguration:
+              issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
+              audience: [!Ref UserClient]
+  Api:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../dist/
+      Handler: api.handler
+      ReservedConcurrentExecutions: 3
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: !Ref UserPool
+          COGNITO_CLIENT_ID: !Ref UserClient
+          WEB_ORIGIN: !Ref WebOrigin
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:ConditionCheckItem]
+              Resource: [!GetAtt Data.Arn, !GetAtt Secrets.Arn]
+            - Effect: Allow
+              Action: dynamodb:Query
+              Resource: !Sub '${Data.Arn}/index/*'
+            - Effect: Allow
+              Action: sqs:SendMessage
+              Resource: !GetAtt Queue.Arn
+      Events:
+        Management:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Path: '/v1/{proxy+}', Method: ANY }
+        Ingestion:
+          Type: HttpApi
+          Properties:
+            { ApiId: !Ref HttpApi, Path: /v1/events, Method: POST, Auth: { Authorizer: NONE } }
+        Health:
+          Type: HttpApi
+          Properties:
+            { ApiId: !Ref HttpApi, Path: /health, Method: GET, Auth: { Authorizer: NONE } }
+        Preflight:
+          Type: HttpApi
+          Properties:
+            {
+              ApiId: !Ref HttpApi,
+              Path: '/v1/{proxy+}',
+              Method: OPTIONS,
+              Auth: { Authorizer: NONE },
+            }
+  Worker:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../dist/
+      Handler: worker.handler
+      ReservedConcurrentExecutions: 3
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:ConditionCheckItem]
+              Resource: !GetAtt Data.Arn
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:ConditionCheckItem]
+              Resource: !GetAtt Secrets.Arn
+            - Effect: Allow
+              Action: dynamodb:Query
+              Resource: !Sub '${Data.Arn}/index/Work'
+            - Effect: Allow
+              Action: sqs:SendMessage
+              Resource: !GetAtt Queue.Arn
+      Events:
+        Jobs:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt Queue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig: { MaximumConcurrency: 2 }
+        Reconcile:
+          Type: Schedule
+          Properties: { Schedule: 'rate(1 minute)', Enabled: true }
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub '/aws/lambda/${Api}', RetentionInDays: 7 }
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub '/aws/lambda/${Worker}', RetentionInDays: 7 }
+  Frontend:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        {
+          BlockPublicAcls: true,
+          BlockPublicPolicy: true,
+          IgnorePublicAcls: true,
+          RestrictPublicBuckets: true,
+        }
+      BucketEncryption:
+        {
+          ServerSideEncryptionConfiguration:
+            [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }],
+        }
+  OriginAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        {
+          Name: !Sub '${AWS::StackName}-frontend',
+          OriginAccessControlOriginType: s3,
+          SigningBehavior: always,
+          SigningProtocol: sigv4,
+        }
+  FrontendHeaders:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub '${AWS::StackName}-headers'
+        SecurityHeadersConfig:
+          ContentTypeOptions: { Override: true }
+          FrameOptions: { FrameOption: DENY, Override: true }
+          ReferrerPolicy: { ReferrerPolicy: no-referrer, Override: true }
+          StrictTransportSecurity:
+            { AccessControlMaxAgeSec: 31536000, IncludeSubdomains: true, Override: true }
+          ContentSecurityPolicy:
+            Override: true
+            ContentSecurityPolicy: !Sub "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com https://${AuthDomainPrefix}.auth.${AWS::Region}.amazoncognito.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: web
+            DomainName: !GetAtt Frontend.RegionalDomainName
+            OriginAccessControlId: !Ref OriginAccess
+            S3OriginConfig: { OriginAccessIdentity: '' }
+        DefaultCacheBehavior:
+          TargetOriginId: web
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: !Ref FrontendHeaders
+          Compress: true
+        CustomErrorResponses:
+          - {
+              ErrorCode: 403,
+              ResponseCode: 200,
+              ResponsePagePath: /index.html,
+              ErrorCachingMinTTL: 0,
+            }
+          - {
+              ErrorCode: 404,
+              ResponseCode: 200,
+              ResponsePagePath: /index.html,
+              ErrorCachingMinTTL: 0,
+            }
+  FrontendPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Frontend
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub '${Frontend.Arn}/*'
+            Condition:
+              {
+                StringEquals:
+                  {
+                    'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}',
+                  },
+              }
+          - Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource: [!GetAtt Frontend.Arn, !Sub '${Frontend.Arn}/*']
+            Condition: { Bool: { 'aws:SecureTransport': false } }
+  QueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Oathwire outstanding queue work is more than 20 minutes old
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions: [{ Name: QueueName, Value: !GetAtt Queue.QueueName }]
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1200
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationsTopic]
+  DeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{ Name: QueueName, Value: !GetAtt DeadLetterQueue.QueueName }]
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationsTopic]
+  WorkerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref Worker }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationsTopic]
+  OperationsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription: [{ Protocol: email, Endpoint: !Ref BudgetEmail }]
+  Budget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub '${AWS::StackName}-monthly'
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref MonthlyBudget, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification:
+            {
+              NotificationType: ACTUAL,
+              ComparisonOperator: GREATER_THAN,
+              Threshold: 5,
+              ThresholdType: ABSOLUTE_VALUE,
+            }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref BudgetEmail }]
+        - Notification:
+            {
+              NotificationType: ACTUAL,
+              ComparisonOperator: GREATER_THAN,
+              Threshold: 15,
+              ThresholdType: ABSOLUTE_VALUE,
+            }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref BudgetEmail }]
+        - Notification:
+            {
+              NotificationType: ACTUAL,
+              ComparisonOperator: GREATER_THAN,
+              Threshold: 30,
+              ThresholdType: ABSOLUTE_VALUE,
+            }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref BudgetEmail }]
+Outputs:
+  ApiUrl: { Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com' }
+  WebUrl: { Value: !Sub 'https://${Distribution.DomainName}' }
+  FrontendBucket: { Value: !Ref Frontend }
+  DistributionId: { Value: !Ref Distribution }
+  UserPoolId: { Value: !Ref UserPool }
+  UserClientId: { Value: !Ref UserClient }
+  AuthDomain: { Value: !Sub 'https://${AuthDomainPrefix}.auth.${AWS::Region}.amazoncognito.com' }

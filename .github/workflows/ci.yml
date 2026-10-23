@@ -1,0 +1,25 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:latest
+        ports: ['8000:8000']
+    env:
+      DYNAMODB_LOCAL_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run format:check
+      - uses: aws-actions/setup-sam@v2
+      - run: sam validate --lint --template-file infra/template.yaml --region eu-central-1
+      - run: sam build --template-file infra/template.yaml

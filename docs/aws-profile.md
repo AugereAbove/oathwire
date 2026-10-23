@@ -1,6 +1,18 @@
 # Secure AWS CLI profile setup
 
-These are owner run instructions, not commands executed during the local audit. They do not authorize deployment. No AWS resource creation, policy change or IAM setup has been performed by this project.
+## Verified access status (2026-10-23)
+
+AWS CLI v2.38.5 and SAM CLI v1.170.0 are installed locally. The owner approved creation of IAM user `oathwire-dev` with `ViewOnlyAccess` and `SignInLocalDevelopmentAccess`, then completed password and MFA setup directly in AWS. The console confirmed one MFA device and zero access keys. Browser login completed and STS verified `arn:aws:iam::333222441063:user/oathwire-dev` in account `333222441063`. The local profile defaults to `eu-central-1` and JSON output. Temporary login credentials remain outside the repository.
+
+The owner also approved the inline `OathwirePreflightRead` policy in `infra/preflight-read-policy.json`. It is attached and its Lambda/account-quota read actions work through the non-root CLI. Permissions are restricted to Frankfurt; individual quota lookups are limited to five application services, while quota listing can show service quotas across that region.
+
+Read-only checks found no non-deleted CloudFormation stacks and no Lambda functions in Frankfurt. **The Lambda concurrent-execution quota is 10, which blocks the current deployment.** The template reserves 3 executions for each of two functions. AWS requires 100 executions to remain unreserved, so this empty account needs at least 106 total. No quota increase has been requested and the function safeguards have not been removed. See the [AWS concurrency API requirements](https://docs.aws.amazon.com/lambda/latest/api/API_PutFunctionConcurrency.html).
+
+API Gateway reports a 10,000 requests/sec regional quota, burst 5,000 and 300 routes per HTTP API; the application uses lower throttles and four routes. Cognito reports 1,000 pools and 1,000 clients per pool; the application needs one of each. DynamoDB reports capacity limits of 80,000 account read/write units each and 40,000 per table, 2,500 tables and 20 GSIs/table; the application needs two on-demand tables and three GSIs. Provisioned-capacity limits are not measurements of the application's on-demand usage. The SQS applied-quota listing returned no entries, so it does not confirm queue-specific live behavior.
+
+Repeat these read-only checks with `./scripts/aws-preflight.ps1 -AccountId 333222441063`. It writes account metadata to ignored `.local/deployment/aws-preflight.json`, refuses a mismatched account or root CLI profile, and fails when the six reserved executions cannot be allocated. No application infrastructure or change set has been created, and no deployment permissions have been granted.
+
+The instructions below describe repeatable setup and do not authorize deployment. Do not share credential files, cached tokens, passwords or MFA codes in chat or Git.
 
 ## Install AWS CLI v2
 

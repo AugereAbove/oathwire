@@ -26,6 +26,7 @@ jobs:
       BUDGET_EMAIL: ${{ vars.BUDGET_EMAIL }}
       ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
       CF_EXECUTION_ROLE_ARN: ${{ vars.CF_EXECUTION_ROLE_ARN }}
+      RUNTIME_BOUNDARY_ARN: ${{ vars.RUNTIME_BOUNDARY_ARN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,15 +42,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for key in WEB_ORIGIN AUTH_DOMAIN_PREFIX BUDGET_EMAIL ARTIFACT_BUCKET CF_EXECUTION_ROLE_ARN; do
+          for key in WEB_ORIGIN AUTH_DOMAIN_PREFIX BUDGET_EMAIL ARTIFACT_BUCKET CF_EXECUTION_ROLE_ARN RUNTIME_BOUNDARY_ARN; do
             test -n "${!key}" || { echo "Missing environment variable: $key"; exit 1; }
           done
+          reservable=$(aws lambda get-account-settings --region eu-central-1 --query AccountLimit.UnreservedConcurrentExecutions --output text)
+          if (( reservable < 106 )); then
+            echo 'Insufficient Lambda concurrency: preserve 100 unreserved plus 3 per Oathwire function.' >&2
+            exit 1
+          fi
           sam validate --lint --template-file infra/template.yaml --region eu-central-1
           sam build --template-file infra/template.yaml
           sam deploy --template-file .aws-sam/build/template.yaml --stack-name "$STACK_NAME" \
             --region eu-central-1 --s3-bucket "$ARTIFACT_BUCKET" --s3-prefix oathwire-beta \
             --role-arn "$CF_EXECUTION_ROLE_ARN" --capabilities CAPABILITY_IAM \
-            --parameter-overrides "WebOrigin=$WEB_ORIGIN" "AuthDomainPrefix=$AUTH_DOMAIN_PREFIX" "BudgetEmail=$BUDGET_EMAIL" \
+            --parameter-overrides "WebOrigin=$WEB_ORIGIN" "AuthDomainPrefix=$AUTH_DOMAIN_PREFIX" "BudgetEmail=$BUDGET_EMAIL" "RuntimePermissionsBoundaryArn=$RUNTIME_BOUNDARY_ARN" \
             --no-execute-changeset --no-confirm-changeset --no-fail-on-empty-changeset
       - name: Save review evidence without executing
         shell: bash

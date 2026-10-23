@@ -2,6 +2,8 @@
 
 Date: 2026-10-23. Environment: Windows, Node 24, npm 11, Java DynamoDB Local, region configuration eu-central-1. No production performance numbers have been measured.
 
+AWS preparation update: temporary CLI authentication now verifies the non-root user in account `333222441063`; MFA and zero access keys were confirmed in the console. The approved preflight read policy is attached. Lambda account settings and Service Quotas report only 10 regional concurrent executions, insufficient for the template's six reserved executions plus AWS's required 100 unreserved. No application stack/change set exists. The repeatable preflight script confirms this blocker and records ignored local metadata. See [deployment preparation](deployment-preparation.md) for exact completed work, account limits, costs and remaining approval steps. This does not establish live application correctness.
+
 Executed locally:
 
 - `npm run check`: ESLint, strict TypeScript, 58 unit/service/React/SDK tests and API/worker/frontend builds, including the pre deployment audit corrections.

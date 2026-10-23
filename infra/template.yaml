@@ -2,6 +2,10 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Oathwire invitation-only webhook delivery beta
 Parameters:
+  RuntimePermissionsBoundaryArn:
+    Type: String
+    Description: Reviewed runtime boundary ARN from the Oathwire bootstrap stack
+    AllowedPattern: 'arn:aws:iam::[0-9]{12}:policy/.+'
   WebOrigin:
     Type: String
     Description: Frontend origin, without trailing slash; use http://localhost:5173 for initial stack creation
@@ -224,6 +228,7 @@ Resources:
   ApiRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !Ref RuntimePermissionsBoundaryArn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -249,6 +254,7 @@ Resources:
   WorkerRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !Ref RuntimePermissionsBoundaryArn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

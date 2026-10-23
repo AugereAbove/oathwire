@@ -1,0 +1,35 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadFrankfurtLambdaAccountLimits",
+      "Effect": "Allow",
+      "Action": "lambda:GetAccountSettings",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "eu-central-1" }
+      }
+    },
+    {
+      "Sid": "ReadFrankfurtDeploymentQuotas",
+      "Effect": "Allow",
+      "Action": "servicequotas:GetServiceQuota",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1",
+          "servicequotas:service": ["lambda", "apigateway", "dynamodb", "sqs", "cognito-idp"]
+        }
+      }
+    },
+    {
+      "Sid": "ListFrankfurtServiceQuotas",
+      "Effect": "Allow",
+      "Action": "servicequotas:ListServiceQuotas",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "eu-central-1" }
+      }
+    }
+  ]
+}

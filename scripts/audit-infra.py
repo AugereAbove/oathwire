@@ -54,6 +54,7 @@ assert resources['HttpApi']['Properties']['Auth']['DefaultAuthorizer'] == 'Cogni
 for key in ('ApiLogs', 'WorkerLogs'):
     assert resources[key]['Properties']['RetentionInDays'] == 7
 for key in ('ApiRole', 'WorkerRole'):
+    assert resources[key]['Properties']['PermissionsBoundary'] == {'Ref': 'RuntimePermissionsBoundaryArn'}
     assert 'ManagedPolicyArns' not in resources[key]['Properties']
     for policy in resources[key]['Properties']['Policies']:
         for statement in policy['PolicyDocument']['Statement']:
@@ -71,6 +72,7 @@ assert 'aws cloudformation execute-change-set' not in commands
 assert 'aws s3 ' not in commands
 parameters = {key: value['Default'] for key, value in template['Parameters'].items() if 'Default' in value}
 parameters.update(AuthDomainPrefix='oathwire-audit-placeholder', BudgetEmail='owner@example.com')
+parameters['RuntimePermissionsBoundaryArn'] = 'arn:aws:iam::000000000000:policy/oathwire-audit-placeholder'
 for resource in template['Resources'].values():
     if resource['Type'] == 'AWS::Serverless::Function':
         resource['Properties']['CodeUri'] = 's3://oathwire-offline-placeholder/bundle.zip'

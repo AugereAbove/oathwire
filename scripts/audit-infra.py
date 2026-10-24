@@ -110,6 +110,13 @@ for mode in ('reserved', 'shared-beta'):
 bootstrap = yaml.load(Path('infra/bootstrap.yaml').read_text(encoding='utf-8'), Loader=Loader)
 assert len(bootstrap['Resources']) == 4
 statements = bootstrap['Resources']['ExecutionRole']['Properties']['Policies'][0]['PolicyDocument']['Statement']
+api_collection = {'Fn::Sub': 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis'}
+assert any(statement['Resource'] == api_collection and 'apigateway:PUT' in (
+    statement['Action'] if isinstance(statement['Action'], list) else [statement['Action']]
+) for statement in statements), 'CloudFormation imports the HTTP API with PUT /apis'
+mapping_reads = [statement for statement in statements if statement['Resource'] == '*' and statement['Action'] == 'lambda:GetEventSourceMapping']
+assert len(mapping_reads) == 1
+assert mapping_reads[0]['Condition'] == {'StringEquals': {'aws:RequestedRegion': {'Ref': 'AWS::Region'}}}
 for statement in statements:
     actions = statement['Action'] if isinstance(statement['Action'], list) else [statement['Action']]
     assert '*' not in actions

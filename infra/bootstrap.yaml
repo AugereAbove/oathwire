@@ -381,6 +381,16 @@ Resources:
               - Effect: Allow
                 Action: [budgets:ViewBudget, budgets:ModifyBudget]
                 Resource: !Sub 'arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/${ApplicationStackName}-monthly'
+              - Sid: ImportRegionalHttpApi
+                Effect: Allow
+                Action: apigateway:PUT
+                Resource: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis'
+                Condition: { StringEquals: { 'aws:RequestedRegion': !Ref 'AWS::Region' } }
+              - Sid: ReadMissingEventSourceMappingDuringRollback
+                Effect: Allow
+                Action: lambda:GetEventSourceMapping
+                Resource: '*'
+                Condition: { StringEquals: { 'aws:RequestedRegion': !Ref 'AWS::Region' } }
 Outputs:
   ArtifactBucket: { Value: !Ref Artifacts }
   ExecutionRoleArn: { Value: !GetAtt ExecutionRole.Arn }

@@ -2,6 +2,12 @@ name: Prepare change set for review
 on:
   workflow_dispatch:
     inputs:
+      concurrency_mode:
+        description: 'Explicitly select reviewed function reservations or the shared ten-execution private beta'
+        type: choice
+        options: [reserved, shared-beta]
+        default: reserved
+        required: true
       authorize_plan:
         description: 'Owner authorizes AWS artifact uploads and creating a change set (does NOT execute it)'
         type: boolean
@@ -27,6 +33,8 @@ jobs:
       ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
       CF_EXECUTION_ROLE_ARN: ${{ vars.CF_EXECUTION_ROLE_ARN }}
       RUNTIME_BOUNDARY_ARN: ${{ vars.RUNTIME_BOUNDARY_ARN }}
+      EXPECTED_ACCOUNT_ID: ${{ vars.EXPECTED_ACCOUNT_ID }}
+      CONCURRENCY_MODE: ${{ inputs.concurrency_mode }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,20 +50,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for key in WEB_ORIGIN AUTH_DOMAIN_PREFIX BUDGET_EMAIL ARTIFACT_BUCKET CF_EXECUTION_ROLE_ARN RUNTIME_BOUNDARY_ARN; do
+          for key in WEB_ORIGIN AUTH_DOMAIN_PREFIX BUDGET_EMAIL ARTIFACT_BUCKET CF_EXECUTION_ROLE_ARN RUNTIME_BOUNDARY_ARN EXPECTED_ACCOUNT_ID CONCURRENCY_MODE; do
             test -n "${!key}" || { echo "Missing environment variable: $key"; exit 1; }
           done
-          reservable=$(aws lambda get-account-settings --region eu-central-1 --query AccountLimit.UnreservedConcurrentExecutions --output text)
-          if (( reservable < 106 )); then
-            echo 'Insufficient Lambda concurrency: preserve 100 unreserved plus 3 per Oathwire function.' >&2
-            exit 1
-          fi
+          node scripts/aws-preflight.mjs --account "$EXPECTED_ACCOUNT_ID" --concurrency-mode "$CONCURRENCY_MODE"
           sam validate --lint --template-file infra/template.yaml --region eu-central-1
           sam build --template-file infra/template.yaml
           sam deploy --template-file .aws-sam/build/template.yaml --stack-name "$STACK_NAME" \
             --region eu-central-1 --s3-bucket "$ARTIFACT_BUCKET" --s3-prefix oathwire-beta \
-            --role-arn "$CF_EXECUTION_ROLE_ARN" --capabilities CAPABILITY_IAM \
-            --parameter-overrides "WebOrigin=$WEB_ORIGIN" "AuthDomainPrefix=$AUTH_DOMAIN_PREFIX" "BudgetEmail=$BUDGET_EMAIL" "RuntimePermissionsBoundaryArn=$RUNTIME_BOUNDARY_ARN" \
+            --role-arn "$CF_EXECUTION_ROLE_ARN" --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides "WebOrigin=$WEB_ORIGIN" "AuthDomainPrefix=$AUTH_DOMAIN_PREFIX" "BudgetEmail=$BUDGET_EMAIL" "RuntimePermissionsBoundaryArn=$RUNTIME_BOUNDARY_ARN" "ConcurrencyMode=$CONCURRENCY_MODE" \
             --no-execute-changeset --no-confirm-changeset --no-fail-on-empty-changeset
       - name: Save review evidence without executing
         shell: bash

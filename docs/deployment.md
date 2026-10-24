@@ -30,7 +30,7 @@ The checked in `samconfig.toml` fixes the region to `eu-central-1`, enables `con
 After authorization, with an existing owner approved artifact bucket and CloudFormation execution role, prepare a change set using the CLI (replace every placeholder locally):
 
 ```powershell
-sam deploy --template-file .aws-sam/build/template.yaml --stack-name oathwire-beta --profile oathwire-dev --region eu-central-1 --s3-bucket YOUR_ARTIFACT_BUCKET --s3-prefix oathwire-beta --role-arn YOUR_CLOUDFORMATION_EXECUTION_ROLE_ARN --capabilities CAPABILITY_IAM --parameter-overrides 'WebOrigin=http://localhost:5173' 'AuthDomainPrefix=YOUR_UNIQUE_PREFIX' 'BudgetEmail=YOUR_EMAIL' 'RuntimePermissionsBoundaryArn=YOUR_RUNTIME_BOUNDARY_ARN' --no-execute-changeset --confirm-changeset
+sam deploy --template-file .aws-sam/build/template.yaml --stack-name oathwire-beta --profile oathwire-dev --region eu-central-1 --s3-bucket YOUR_ARTIFACT_BUCKET --s3-prefix oathwire-beta --role-arn YOUR_CLOUDFORMATION_EXECUTION_ROLE_ARN --capabilities CAPABILITY_NAMED_IAM --parameter-overrides 'WebOrigin=http://localhost:5173' 'AuthDomainPrefix=YOUR_UNIQUE_PREFIX' 'BudgetEmail=YOUR_EMAIL' 'RuntimePermissionsBoundaryArn=YOUR_RUNTIME_BOUNDARY_ARN' --no-execute-changeset --confirm-changeset
 aws cloudformation list-change-sets --stack-name oathwire-beta --profile oathwire-dev --region eu-central-1
 aws cloudformation describe-change-set --change-set-name REVIEWED_CHANGE_SET_ARN --stack-name oathwire-beta --profile oathwire-dev --region eu-central-1 --include-property-values
 ```
@@ -85,7 +85,7 @@ The owner must provision a GitHub OIDC provider (`https://token.actions.githubus
 Use a dedicated CloudFormation execution role and an artifact bucket rather than administrator access in the workflow. The deployment role needs:
 
 - CloudFormation create/describe/list change sets only for `oathwire-beta`; restrict any unavoidable list/validate actions separately. Do not grant ExecuteChangeSet or stack deletion/update shortcuts to the planning role.
-- `lambda:GetAccountSettings` in `eu-central-1` for the plan workflow's concurrency guard. The available unreserved pool must be at least 106 before allocating 3 executions to each function; the current account has only 10.
+- `lambda:GetAccountSettings`, `lambda:ListFunctions`, and reads of the two named functions' concurrency settings in `eu-central-1` for the shared preflight. Select `reserved` (default) or explicitly approved `shared-beta`; see [concurrency and IAM preparation](concurrency-and-iam.md). The current quota is 10.
 - `iam:PassRole` only for the dedicated CloudFormation execution role, conditioned on `cloudformation.amazonaws.com`.
 - Read/write only the `oathwire-beta/` artifact prefix plus bucket location/list permissions as needed by SAM.
 - No frontend publication permission is needed by the planning workflow. A separately authorized publishing identity would need S3 list/put only for the stack's frontend bucket and CloudFront invalidation only for its distribution.
@@ -94,7 +94,7 @@ The CloudFormation execution role needs the resource management actions listed i
 
 `infra/bootstrap.yaml` is a locally validated draft of the artifact bucket, TLS policy, runtime boundary and CloudFormation execution role. It has not been deployed or verified against live CloudFormation providers. Review its generated-ID and wildcard creation scopes before authorizing it. No GitHub OIDC resources are required for a local CLI deployment; configure them only if the GitHub planning workflow will be used.
 
-Set these **production environment variables**: `AWS_DEPLOY_ROLE_ARN` (planning role despite the historical variable name), `CF_EXECUTION_ROLE_ARN`, `RUNTIME_BOUNDARY_ARN`, `ARTIFACT_BUCKET`, `WEB_ORIGIN`, `AUTH_DOMAIN_PREFIX`, `BUDGET_EMAIL`. Run the plan workflow only after owner authorization. It does not run automatically on pushes. No execute/publish workflow is enabled.
+Set these **production environment variables**: `AWS_DEPLOY_ROLE_ARN` (planning role despite the historical variable name), `CF_EXECUTION_ROLE_ARN`, `RUNTIME_BOUNDARY_ARN`, `EXPECTED_ACCOUNT_ID`, `ARTIFACT_BUCKET`, `WEB_ORIGIN`, `AUTH_DOMAIN_PREFIX`, `BUDGET_EMAIL`. Run the plan workflow only after owner authorization. It does not run automatically on pushes. No execute/publish workflow is enabled.
 
 ### Frontend publication (separate authorization)
 

@@ -1,0 +1,78 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PlanOnlyApplicationStack",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ListChangeSets",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:GetTemplate",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:TagResource"
+      ],
+      "Resource": "arn:aws:cloudformation:eu-central-1:${AccountId}:stack/oathwire-beta/*"
+    },
+    {
+      "Sid": "CreatePlanOnlyWithReviewedExecutionRole",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateChangeSet",
+      "Resource": "arn:aws:cloudformation:eu-central-1:${AccountId}:stack/oathwire-beta/*",
+      "Condition": {
+        "StringEquals": {
+          "cloudformation:RoleArn": "arn:aws:iam::${AccountId}:role/oathwire-beta-cloudformation"
+        }
+      }
+    },
+    {
+      "Sid": "ReadPlanMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ValidateTemplate",
+        "cloudformation:ListStacks",
+        "lambda:GetAccountSettings",
+        "lambda:ListFunctions",
+        "servicequotas:ListServiceQuotas"
+      ],
+      "Resource": "*",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "eu-central-1" } }
+    },
+    {
+      "Sid": "ReadOwnFunctionReservations",
+      "Effect": "Allow",
+      "Action": "lambda:GetFunctionConcurrency",
+      "Resource": [
+        "arn:aws:lambda:eu-central-1:${AccountId}:function:oathwire-beta-api",
+        "arn:aws:lambda:eu-central-1:${AccountId}:function:oathwire-beta-worker"
+      ]
+    },
+    {
+      "Sid": "ReadLambdaQuota",
+      "Effect": "Allow",
+      "Action": "servicequotas:GetServiceQuota",
+      "Resource": "arn:aws:servicequotas:eu-central-1:${AccountId}:lambda/L-B99A9384"
+    },
+    {
+      "Sid": "PassOnlyReviewedCloudFormationRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::${AccountId}:role/oathwire-beta-cloudformation",
+      "Condition": { "StringEquals": { "iam:PassedToService": "cloudformation.amazonaws.com" } }
+    },
+    {
+      "Sid": "ArtifactBucketMetadata",
+      "Effect": "Allow",
+      "Action": ["s3:GetBucketLocation", "s3:ListBucket"],
+      "Resource": "arn:aws:s3:::oathwire-beta-artifacts-${AccountId}-eu-central-1"
+    },
+    {
+      "Sid": "OnlyApplicationArtifactPrefix",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::oathwire-beta-artifacts-${AccountId}-eu-central-1/oathwire-beta/*"
+    }
+  ]
+}

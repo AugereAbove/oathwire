@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ExecuteReviewedApplicationChangeSet",
+      "Effect": "Allow",
+      "Action": "cloudformation:ExecuteChangeSet",
+      "Resource": "arn:aws:cloudformation:eu-central-1:${AccountId}:stack/oathwire-beta/*"
+    }
+  ]
+}

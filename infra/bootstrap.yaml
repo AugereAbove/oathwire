@@ -44,6 +44,7 @@ Resources:
   RuntimeBoundary:
     Type: AWS::IAM::ManagedPolicy
     Properties:
+      ManagedPolicyName: !Sub '${ApplicationStackName}-runtime-boundary'
       Description: Maximum permissions for Oathwire Lambda roles; inline role policies narrow these further
       PolicyDocument:
         Version: '2012-10-17'
@@ -63,6 +64,7 @@ Resources:
   ExecutionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ApplicationStackName}-cloudformation'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -80,7 +82,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: [iam:CreateRole, iam:PutRolePermissionsBoundary]
-                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-*'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-api-runtime'
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-worker-runtime'
                 Condition: { StringEquals: { 'iam:PermissionsBoundary': !Ref RuntimeBoundary } }
               - Effect: Allow
                 Action:
@@ -90,17 +94,20 @@ Resources:
                     iam:GetRolePolicy,
                     iam:PutRolePolicy,
                     iam:DeleteRolePolicy,
-                    iam:UpdateAssumeRolePolicy,
                     iam:TagRole,
                     iam:UntagRole,
                     iam:ListRolePolicies,
                     iam:ListAttachedRolePolicies,
                     iam:ListRoleTags,
                   ]
-                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-*'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-api-runtime'
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-worker-runtime'
               - Effect: Allow
                 Action: iam:PassRole
-                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-*'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-api-runtime'
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-worker-runtime'
                 Condition: { StringEquals: { 'iam:PassedToService': lambda.amazonaws.com } }
               - Effect: Allow
                 Action: [s3:GetObject, s3:GetObjectVersion]
@@ -123,7 +130,7 @@ Resources:
                     s3:GetBucketVersioning,
                     s3:GetBucketOwnershipControls,
                   ]
-                Resource: !Sub 'arn:${AWS::Partition}:s3:::${ApplicationStackName}-*'
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${ApplicationStackName}-frontend-${AWS::AccountId}-${AWS::Region}'
               - Effect: Allow
                 Action:
                   [
@@ -185,10 +192,13 @@ Resources:
                     lambda:GetEventSourceMapping,
                     lambda:UpdateEventSourceMapping,
                     lambda:DeleteEventSourceMapping,
-                    lambda:TagResource,
-                    lambda:UntagResource,
-                    lambda:ListTags,
                   ]
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:event-source-mapping:*'
+                Condition:
+                  ArnLike:
+                    lambda:FunctionArn: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ApplicationStackName}-worker'
+              - Effect: Allow
+                Action: [lambda:TagResource, lambda:UntagResource, lambda:ListTags]
                 Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:event-source-mapping:*'
               - Effect: Allow
                 Action:
@@ -251,9 +261,25 @@ Resources:
                 Action: [sns:GetSubscriptionAttributes, sns:Unsubscribe]
                 Resource: !Sub 'arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:${ApplicationStackName}-*'
               - Effect: Allow
-                Action: [cognito-idp:CreateUserPool, cognito-idp:DescribeUserPoolDomain]
+                Action: cognito-idp:DescribeUserPoolDomain
                 Resource: '*'
                 Condition: { StringEquals: { 'aws:RequestedRegion': !Ref 'AWS::Region' } }
+              - Effect: Allow
+                Action: cognito-idp:CreateUserPool
+                Resource: '*'
+                Condition:
+                  {
+                    StringEquals:
+                      {
+                        'aws:RequestedRegion': !Ref 'AWS::Region',
+                        'aws:RequestTag/OathwireStack': !Ref ApplicationStackName,
+                      },
+                  }
+              - Effect: Allow
+                Action: cognito-idp:TagResource
+                Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*'
+                Condition:
+                  { StringEquals: { 'aws:RequestTag/OathwireStack': !Ref ApplicationStackName } }
               - Effect: Allow
                 Action:
                   [
@@ -267,11 +293,27 @@ Resources:
                     cognito-idp:CreateUserPoolDomain,
                     cognito-idp:UpdateUserPoolDomain,
                     cognito-idp:DeleteUserPoolDomain,
-                    cognito-idp:TagResource,
                     cognito-idp:UntagResource,
                     cognito-idp:ListTagsForResource,
                   ]
                 Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*'
+                Condition:
+                  { StringEquals: { 'aws:ResourceTag/OathwireStack': !Ref ApplicationStackName } }
+              - Effect: Allow
+                Action: apigateway:GET
+                Resource:
+                  [
+                    !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis',
+                    !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*',
+                  ]
+              - Effect: Allow
+                Action: apigateway:POST
+                Resource: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis'
+              - Effect: Allow
+                Action: [apigateway:POST, apigateway:PUT, apigateway:PATCH, apigateway:DELETE]
+                Resource: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*'
+                Condition:
+                  { StringEquals: { 'aws:ResourceTag/OathwireStack': !Ref ApplicationStackName } }
               - Effect: Allow
                 Action:
                   [
@@ -281,12 +323,12 @@ Resources:
                     apigateway:PATCH,
                     apigateway:DELETE,
                   ]
-                Resource:
-                  [
-                    !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis',
-                    !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*',
-                    !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/tags/*',
-                  ]
+                Resource: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/tags/*'
+                Condition:
+                  {
+                    StringEqualsIfExists:
+                      { 'aws:ResourceTag/OathwireStack': !Ref ApplicationStackName },
+                  }
               - Effect: Allow
                 Action:
                   [
@@ -302,6 +344,16 @@ Resources:
                     cloudfront:GetDistributionConfig,
                     cloudfront:UpdateDistribution,
                     cloudfront:DeleteDistribution,
+                    cloudfront:TagResource,
+                    cloudfront:UntagResource,
+                    cloudfront:ListTagsForResource,
+                  ]
+                Resource: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*'
+                Condition:
+                  { StringEquals: { 'aws:ResourceTag/OathwireStack': !Ref ApplicationStackName } }
+              - Effect: Allow
+                Action:
+                  [
                     cloudfront:GetOriginAccessControl,
                     cloudfront:GetOriginAccessControlConfig,
                     cloudfront:UpdateOriginAccessControl,
@@ -310,13 +362,9 @@ Resources:
                     cloudfront:GetResponseHeadersPolicyConfig,
                     cloudfront:UpdateResponseHeadersPolicy,
                     cloudfront:DeleteResponseHeadersPolicy,
-                    cloudfront:TagResource,
-                    cloudfront:UntagResource,
-                    cloudfront:ListTagsForResource,
                   ]
                 Resource:
                   [
-                    !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*',
                     !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:origin-access-control/*',
                     !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:response-headers-policy/*',
                   ]

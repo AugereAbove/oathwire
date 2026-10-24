@@ -2,6 +2,11 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Oathwire invitation-only webhook delivery beta
 Parameters:
+  ConcurrencyMode:
+    Type: String
+    Default: reserved
+    AllowedValues: [reserved, shared-beta]
+    Description: reserved keeps 3 executions per function; shared-beta explicitly uses the small regional shared pool without function reservations
   RuntimePermissionsBoundaryArn:
     Type: String
     Description: Reviewed runtime boundary ARN from the Oathwire bootstrap stack
@@ -31,6 +36,8 @@ Parameters:
     Default: 100
     MinValue: 1
     MaxValue: 1000
+Conditions:
+  UseReservedConcurrency: !Equals [!Ref ConcurrencyMode, reserved]
 Globals:
   Function:
     Runtime: nodejs24.x
@@ -121,6 +128,7 @@ Resources:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: !Sub '${AWS::StackName}-users'
+      UserPoolTags: { OathwireStack: !Ref 'AWS::StackName' }
       UserPoolTier: LITE
       AdminCreateUserConfig: { AllowAdminCreateUserOnly: true }
       UsernameAttributes: [email]
@@ -159,6 +167,7 @@ Resources:
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
+      Tags: { OathwireStack: !Ref 'AWS::StackName' }
       StageName: '$default'
       DefaultRouteSettings: { ThrottlingBurstLimit: 20, ThrottlingRateLimit: 10 }
       Auth:
@@ -174,7 +183,8 @@ Resources:
     Properties:
       CodeUri: ../dist/
       Handler: api.handler
-      ReservedConcurrentExecutions: 3
+      FunctionName: !Sub '${AWS::StackName}-api'
+      ReservedConcurrentExecutions: !If [UseReservedConcurrency, 3, !Ref 'AWS::NoValue']
       LoggingConfig: { LogGroup: !Ref ApiLogs }
       Environment:
         Variables:
@@ -208,7 +218,8 @@ Resources:
     Properties:
       CodeUri: ../dist/
       Handler: worker.handler
-      ReservedConcurrentExecutions: 3
+      FunctionName: !Sub '${AWS::StackName}-worker'
+      ReservedConcurrentExecutions: !If [UseReservedConcurrency, 3, !Ref 'AWS::NoValue']
       LoggingConfig: { LogGroup: !Ref WorkerLogs }
       Role: !GetAtt WorkerRole.Arn
       Events:
@@ -228,6 +239,7 @@ Resources:
   ApiRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${AWS::StackName}-api-runtime'
       PermissionsBoundary: !Ref RuntimePermissionsBoundaryArn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -254,6 +266,7 @@ Resources:
   WorkerRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${AWS::StackName}-worker-runtime'
       PermissionsBoundary: !Ref RuntimePermissionsBoundaryArn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -319,6 +332,7 @@ Resources:
   Frontend:
     Type: AWS::S3::Bucket
     Properties:
+      BucketName: !Sub '${AWS::StackName}-frontend-${AWS::AccountId}-${AWS::Region}'
       PublicAccessBlockConfiguration:
         {
           BlockPublicAcls: true,
@@ -358,6 +372,7 @@ Resources:
   Distribution:
     Type: AWS::CloudFront::Distribution
     Properties:
+      Tags: [{ Key: OathwireStack, Value: !Ref 'AWS::StackName' }]
       DistributionConfig:
         Enabled: true
         DefaultRootObject: index.html

@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RequestOnlyFrankfurtLambdaConcurrency",
+      "Effect": "Allow",
+      "Action": [
+        "servicequotas:RequestServiceQuotaIncrease",
+        "servicequotas:ListRequestedServiceQuotaChangeHistoryByQuota"
+      ],
+      "Resource": "arn:aws:servicequotas:eu-central-1:${AccountId}:lambda/L-B99A9384",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "eu-central-1" } }
+    },
+    {
+      "Sid": "ReadQuotaRequestStatus",
+      "Effect": "Allow",
+      "Action": [
+        "servicequotas:GetRequestedServiceQuotaChange",
+        "servicequotas:GetAWSDefaultServiceQuota"
+      ],
+      "Resource": "*",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "eu-central-1" } }
+    },
+    {
+      "Sid": "CreateOnlyServiceQuotasSupportRoleIfMissing",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::${AccountId}:role/aws-service-role/servicequotas.amazonaws.com/AWSServiceRoleForServiceQuotas",
+      "Condition": { "StringEquals": { "iam:AWSServiceName": "servicequotas.amazonaws.com" } }
+    }
+  ]
+}

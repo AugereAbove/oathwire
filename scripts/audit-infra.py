@@ -1,4 +1,5 @@
 """Offline SAM expansion and resource inventory. No AWS client or credentials are used."""
+import copy
 import json
 import os
 import tomllib
@@ -35,7 +36,7 @@ template = yaml.load(Path('infra/template.yaml').read_text(encoding='utf-8'), Lo
 resources = template['Resources']
 for key in ('Api', 'Worker'):
     properties = resources[key]['Properties']
-    assert properties['ReservedConcurrentExecutions'] == 3
+    assert properties['ReservedConcurrentExecutions'] == {'Fn::If': ['UseReservedConcurrency', 3, {'Ref': 'AWS::NoValue'}]}
     assert 'LoggingConfig' in properties
 assert template['Globals']['Function']['Timeout'] == 20
 assert template['Globals']['Function']['MemorySize'] == 256
@@ -76,7 +77,57 @@ parameters['RuntimePermissionsBoundaryArn'] = 'arn:aws:iam::000000000000:policy/
 for resource in template['Resources'].values():
     if resource['Type'] == 'AWS::Serverless::Function':
         resource['Properties']['CodeUri'] = 's3://oathwire-offline-placeholder/bundle.zip'
-expanded = transform(template, parameters, OfflinePolicies())
+assert template['Parameters']['ConcurrencyMode']['Default'] == 'reserved'
+assert template['Parameters']['ConcurrencyMode']['AllowedValues'] == ['reserved', 'shared-beta']
+assert template['Conditions']['UseReservedConcurrency'] == {'Fn::Equals': [{'Ref': 'ConcurrencyMode'}, 'reserved']}
+for mode in ('reserved', 'shared-beta'):
+    selected = copy.deepcopy(template)
+    for key in ('Api', 'Worker'):
+        props = selected['Resources'][key]['Properties']
+        if mode == 'reserved':
+            props['ReservedConcurrentExecutions'] = 3
+        else:
+            props.pop('ReservedConcurrentExecutions')
+    expanded_mode = transform(selected, dict(parameters, ConcurrencyMode=mode), OfflinePolicies())
+    for key in ('Api', 'Worker'):
+        props = expanded_mode['Resources'][key]['Properties']
+        assert (props.get('ReservedConcurrentExecutions') == 3) if mode == 'reserved' else ('ReservedConcurrentExecutions' not in props)
+        assert expanded_mode['Resources'][key + 'Role']['Properties']['PermissionsBoundary'] == {'Ref': 'RuntimePermissionsBoundaryArn'}
+    assert expanded_mode['Resources']['WorkerJobs']['Properties']['ScalingConfig']['MaximumConcurrency'] == 2
+    assert expanded_mode['Resources']['HttpApiApiGatewayDefaultStage']['Properties']['DefaultRouteSettings'] == {'ThrottlingBurstLimit': 20, 'ThrottlingRateLimit': 10}
+    assert len(expanded_mode['Resources']) == 35
+    if mode == 'reserved':
+        expanded = expanded_mode
+bootstrap = yaml.load(Path('infra/bootstrap.yaml').read_text(encoding='utf-8'), Loader=Loader)
+assert len(bootstrap['Resources']) == 4
+statements = bootstrap['Resources']['ExecutionRole']['Properties']['Policies'][0]['PolicyDocument']['Statement']
+for statement in statements:
+    actions = statement['Action'] if isinstance(statement['Action'], list) else [statement['Action']]
+    assert '*' not in actions
+    if 'iam:CreateRole' in actions:
+        assert statement['Condition']['StringEquals']['iam:PermissionsBoundary'] == {'Ref': 'RuntimeBoundary'}
+    if any(a.startswith('iam:') for a in actions):
+        assert len(statement['Resource']) == 2
+        assert all(r['Fn::Sub'].endswith(('-api-runtime', '-worker-runtime')) for r in statement['Resource'])
+    if 'lambda:UpdateEventSourceMapping' in actions:
+        assert 'lambda:FunctionArn' in statement['Condition']['ArnLike']
+for file in Path('infra/policies').glob('*.json'):
+    policy = json.loads(file.read_text(encoding='utf-8'))
+    assert '${' not in json.dumps(policy).replace('${AccountId}', '')
+    for statement in policy['Statement']:
+        actions = statement['Action'] if isinstance(statement['Action'], list) else [statement['Action']]
+        assert not any('*' in action for action in actions)
+        assert not any(action.startswith(('iam:CreateAccessKey', 'iam:CreateUser', 'iam:AttachUserPolicy')) for action in actions)
+        if 'iam:PassRole' in actions:
+            assert statement['Resource'].endswith(':role/oathwire-beta-cloudformation')
+            assert statement['Condition']['StringEquals']['iam:PassedToService'] == 'cloudformation.amazonaws.com'
+planner = json.loads(Path('infra/policies/application-planner.json').read_text(encoding='utf-8'))
+assert 'cloudformation:ExecuteChangeSet' not in json.dumps(planner)
+assert 'cloudformation:DeleteStack' not in json.dumps(planner)
+assert 's3:DeleteObject' not in json.dumps(planner)
+request = json.loads(Path('infra/quota-increase-request.json').read_text(encoding='utf-8'))
+assert request == {'ServiceCode': 'lambda', 'QuotaCode': 'L-B99A9384', 'DesiredValue': 1000, 'SupportCaseAllowed': True}
+
 out = Path('.local/audit')
 out.mkdir(parents=True, exist_ok=True)
 (out / 'expanded-template.json').write_text(json.dumps(expanded, indent=2), encoding='utf-8')

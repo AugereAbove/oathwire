@@ -2,12 +2,14 @@
 
 Application deployment is incomplete. No live application/API URL exists and no CloudFormation change set has been created or executed.
 
+Update 2026-10-24: [concurrency and IAM preparation](concurrency-and-iam.md) adds a tested, explicit shared-pool fallback and prepared scoped policies/quota request. The default reserved mode still requires a quota increase; no mode has been deployed. The details below record the preceding preparation snapshot.
+
 ## Completed
 
 - Installed AWS CLI v2.38.5 and SAM CLI v1.170.0.
 - Created the owner-approved non-root IAM user `oathwire-dev`. The owner configured its password and one authenticator MFA device directly in AWS. No access keys were created.
 - Attached approved `ViewOnlyAccess`, `SignInLocalDevelopmentAccess` and inline `OathwirePreflightRead`. These do not grant deployment rights.
-- Completed temporary browser-backed CLI login; STS confirmed account `333222441063` and user `oathwire-dev`. Profile region is `eu-central-1`, output JSON. No root CLI credentials were used.
+- Completed temporary browser-backed CLI login; STS confirmed account `YOUR_AWS_ACCOUNT_ID` and user `oathwire-dev`. Profile region is `eu-central-1`, output JSON. No root CLI credentials were used.
 - Added a repeatable read-only account preflight script, preserving an ignored local JSON evidence file.
 - Prepared `infra/bootstrap.yaml` locally: private encrypted artifact bucket, TLS bucket policy, runtime permissions boundary and CloudFormation execution role. Nothing in this template has been deployed. The draft scopes named resources and the Lambda PassRole destination; API Gateway, Cognito and CloudFront use generated resource IDs and some creation actions require wildcard resources. Runtime IAM behavior still needs review/live verification.
 - Required a runtime permissions boundary on both application execution roles, passed it through the plan workflow, and retained change-set review and no-execute defaults.

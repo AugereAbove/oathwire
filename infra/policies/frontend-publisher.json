@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOnlyFrontendBucketMetadata",
+      "Effect": "Allow",
+      "Action": ["s3:GetBucketLocation", "s3:ListBucket"],
+      "Resource": "arn:aws:s3:::oathwire-beta-frontend-${AccountId}-eu-central-1"
+    },
+    {
+      "Sid": "UploadFrontendWithoutDeletingAssets",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::oathwire-beta-frontend-${AccountId}-eu-central-1/*"
+    },
+    {
+      "Sid": "InvalidateOnlyOwnedApplicationDistribution",
+      "Effect": "Allow",
+      "Action": "cloudfront:CreateInvalidation",
+      "Resource": "arn:aws:cloudfront::${AccountId}:distribution/*",
+      "Condition": { "StringEquals": { "aws:ResourceTag/OathwireStack": "oathwire-beta" } }
+    }
+  ]
+}

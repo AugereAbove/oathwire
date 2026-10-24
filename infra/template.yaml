@@ -327,7 +327,7 @@ Resources:
           - Effect: Deny
             Principal: '*'
             Action: sqs:*
-            Resource: [!GetAtt Queue.Arn, !GetAtt DeadLetterQueue.Arn]
+            Resource: '*'
             Condition: { Bool: { 'aws:SecureTransport': false } }
   Frontend:
     Type: AWS::S3::Bucket

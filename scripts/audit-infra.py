@@ -48,6 +48,15 @@ for key in ('Data', 'Secrets'):
 for index in resources['Data']['Properties']['GlobalSecondaryIndexes']:
     assert 'OnDemandThroughput' in index
 assert resources['Queue']['Properties']['VisibilityTimeout'] >= 6 * template['Globals']['Function']['Timeout']
+queue_policy = resources['QueueTlsPolicy']['Properties']
+assert queue_policy['Queues'] == [{'Ref': 'Queue'}, {'Ref': 'DeadLetterQueue'}]
+for statement in queue_policy['PolicyDocument']['Statement']:
+    policy_resource = statement['Resource']
+    assert not isinstance(policy_resource, list) or len(policy_resource) == 1, 'SQS requires one resource per statement'
+    assert statement['Effect'] == 'Deny'
+    assert statement['Action'] == 'sqs:*'
+    assert statement['Principal'] == '*'
+    assert statement['Condition'] == {'Bool': {'aws:SecureTransport': False}}
 assert resources['Worker']['Properties']['Events']['Jobs']['Properties']['ScalingConfig']['MaximumConcurrency'] == 2
 assert resources['UserPool']['Properties']['AdminCreateUserConfig']['AllowAdminCreateUserOnly'] is True
 assert resources['UserPool']['Properties']['UserPoolTier'] == 'LITE'

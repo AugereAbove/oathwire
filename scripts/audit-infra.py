@@ -109,6 +109,9 @@ for statement in statements:
     if any(a.startswith('iam:') for a in actions):
         assert len(statement['Resource']) == 2
         assert all(r['Fn::Sub'].endswith(('-api-runtime', '-worker-runtime')) for r in statement['Resource'])
+    if 'cloudfront:TagResource' in actions or 'cognito-idp:TagResource' in actions:
+        assert 'aws:RequestTag/OathwireStack' in statement['Condition']['StringEquals']
+        assert 'aws:ResourceTag/OathwireStack' in statement['Condition']['StringEqualsIfExists']
     if 'lambda:UpdateEventSourceMapping' in actions:
         assert 'lambda:FunctionArn' in statement['Condition']['ArnLike']
 for file in Path('infra/policies').glob('*.json'):

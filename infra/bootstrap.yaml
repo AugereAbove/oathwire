@@ -391,6 +391,14 @@ Resources:
                 Action: lambda:GetEventSourceMapping
                 Resource: '*'
                 Condition: { StringEquals: { 'aws:RequestedRegion': !Ref 'AWS::Region' } }
+              - Sid: CreateTaggedHttpApiStage
+                Effect: Allow
+                Action: apigateway:POST
+                Resource: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*/stages'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref 'AWS::Region'
+                    aws:RequestTag/OathwireStack: !Ref ApplicationStackName
 Outputs:
   ArtifactBucket: { Value: !Ref Artifacts }
   ExecutionRoleArn: { Value: !GetAtt ExecutionRole.Arn }

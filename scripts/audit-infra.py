@@ -117,6 +117,14 @@ assert any(statement['Resource'] == api_collection and 'apigateway:PUT' in (
 mapping_reads = [statement for statement in statements if statement['Resource'] == '*' and statement['Action'] == 'lambda:GetEventSourceMapping']
 assert len(mapping_reads) == 1
 assert mapping_reads[0]['Condition'] == {'StringEquals': {'aws:RequestedRegion': {'Ref': 'AWS::Region'}}}
+stage_creates = [statement for statement in statements if statement.get('Sid') == 'CreateTaggedHttpApiStage']
+assert len(stage_creates) == 1
+assert stage_creates[0]['Action'] == 'apigateway:POST'
+assert stage_creates[0]['Resource'] == {'Fn::Sub': 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*/stages'}
+assert stage_creates[0]['Condition'] == {'StringEquals': {
+    'aws:RequestedRegion': {'Ref': 'AWS::Region'},
+    'aws:RequestTag/OathwireStack': {'Ref': 'ApplicationStackName'},
+}}
 for statement in statements:
     actions = statement['Action'] if isinstance(statement['Action'], list) else [statement['Action']]
     assert '*' not in actions

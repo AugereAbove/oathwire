@@ -4,9 +4,9 @@
 
 Oathwire accepts events and delivers signed HTTPS webhooks through a persistent queue. It records delivery attempts, retries temporary endpoint failures, and lets the owner replay failed deliveries. Access is by invitation.
 
-**Status:** implemented and locally tested; not yet deployed or verified against live AWS. See [verification](docs/verification.md) for evidence and remaining acceptance checks. Do not treat this as a production service yet.
+**Status:** deployed as an invitation-only AWS beta. API health, public frontend delivery and security/cost settings are verified; authenticated dashboard and webhook acceptance checks remain pending. See [verification](docs/verification.md) for evidence and remaining acceptance checks. Do not treat this as a production service yet.
 
-The [pre deployment audit](docs/pre-deployment-audit.md) inventories the AWS resources, models Frankfurt costs, and records readiness. [Deployment preparation](docs/deployment-preparation.md) verified non-root AWS access and found a low account concurrency quota; the default reserved mode requires an increase, while an explicitly approved shared-beta mode is available. The workflow only prepares a change set for review after owner authorization.
+The [pre deployment audit](docs/pre-deployment-audit.md) inventories the AWS resources, models Frankfurt costs, and records readiness. [Deployment preparation](docs/deployment-preparation.md) resolved the initial account concurrency blocker. The deployed beta uses reserved concurrency of 3 per function and SQS maximum concurrency of 2. The workflow only prepares a change set for review after owner authorization.
 
 - Cognito hosted sign in with Authorization Code and PKCE.
 - Owned projects, destination subscriptions, hashed publishing keys and revocation.

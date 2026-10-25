@@ -1,6 +1,6 @@
 # Deployment
 
-**Deployment preparation is underway; application infrastructure remains undeployed.** The owner approved a non-root IAM user and completed MFA and temporary CLI authentication. Account identity is verified; some account quota checks still need additional read permissions. See the [current profile status](aws-profile.md). No application stack or change set has been created. Billable resources and infrastructure execution still require owner approval of the concrete plan. Local validation/builds need no authorization. Read the [audit snapshot](pre-deployment-audit.md), [cost model](costs.md), and [secure CLI profile guide](aws-profile.md) first.
+**The invitation-only beta is deployed in `eu-central-1`.** Bootstrap and all 35 application resources were created through reviewed change sets using temporary non-root credentials. A reviewed API async-handler fix and HTTPS callback update completed, and the verified frontend files were published. Live health returns 200; unauthenticated management returns 401. Signed delivery, retries, recovery, replay and authenticated dashboard acceptance remain pending. Temporary deployment and publishing policy attachments have been removed. See [verification](verification.md), the [cost model](costs.md), and the [secure CLI profile guide](aws-profile.md).
 
 ## Prerequisites and billing
 
@@ -85,14 +85,14 @@ The owner must provision a GitHub OIDC provider (`https://token.actions.githubus
 Use a dedicated CloudFormation execution role and an artifact bucket rather than administrator access in the workflow. The deployment role needs:
 
 - CloudFormation create/describe/list change sets only for `oathwire-beta`; restrict any unavoidable list/validate actions separately. Do not grant ExecuteChangeSet or stack deletion/update shortcuts to the planning role.
-- `lambda:GetAccountSettings`, `lambda:ListFunctions`, and reads of the two named functions' concurrency settings in `eu-central-1` for the shared preflight. Select `reserved` (default) or explicitly approved `shared-beta`; see [concurrency and IAM preparation](concurrency-and-iam.md). The current quota is 10.
+- `lambda:GetAccountSettings`, `lambda:ListFunctions`, and reads of the two named functions' concurrency settings in `eu-central-1` for the shared preflight. Select `reserved` (default) or explicitly approved `shared-beta`; see [concurrency and IAM preparation](concurrency-and-iam.md). The applied quota is 1,000 as of 2026-10-25; the deployed mode is reserved.
 - `iam:PassRole` only for the dedicated CloudFormation execution role, conditioned on `cloudformation.amazonaws.com`.
 - Read/write only the `oathwire-beta/` artifact prefix plus bucket location/list permissions as needed by SAM.
 - No frontend publication permission is needed by the planning workflow. A separately authorized publishing identity would need S3 list/put only for the stack's frontend bucket and CloudFront invalidation only for its distribution.
 
 The CloudFormation execution role needs the resource management actions listed in prerequisites, scoped to this stack's resource names/ARNs where supported, including permission to create/pass only its Lambda roles. It is privileged and should have an owner reviewed permissions boundary. An account specific role policy cannot be honestly finalized without its account ID, artifact bucket, provider, and execution role ARN. Do not substitute AdministratorAccess.
 
-`infra/bootstrap.yaml` is a locally validated draft of the artifact bucket, TLS policy, runtime boundary and CloudFormation execution role. It has not been deployed or verified against live CloudFormation providers. Review its generated-ID and wildcard creation scopes before authorizing it. No GitHub OIDC resources are required for a local CLI deployment; configure them only if the GitHub planning workflow will be used.
+`infra/bootstrap.yaml` defines the deployed artifact bucket, TLS policy, runtime boundary and CloudFormation execution role. Approved provider permission corrections were applied to the live role and synchronized to source; the bootstrap stack's stored template predates those edits. Review and preserve that drift before a future bootstrap update. Review its generated-ID and wildcard creation scopes before authorizing it. No GitHub OIDC resources are required for a local CLI deployment; configure them only if the GitHub planning workflow will be used.
 
 Set these **production environment variables**: `AWS_DEPLOY_ROLE_ARN` (planning role despite the historical variable name), `CF_EXECUTION_ROLE_ARN`, `RUNTIME_BOUNDARY_ARN`, `EXPECTED_ACCOUNT_ID`, `ARTIFACT_BUCKET`, `WEB_ORIGIN`, `AUTH_DOMAIN_PREFIX`, `BUDGET_EMAIL`. Run the plan workflow only after owner authorization. It does not run automatically on pushes. No execute/publish workflow is enabled.
 

@@ -1,6 +1,10 @@
 # Secure AWS CLI profile setup
 
-## Verified access status (2026-10-23)
+## Current access status (2026-10-25)
+
+The applied Lambda concurrency quota is 1,000. Bootstrap and application deployment completed in reserved mode, with 3 executions per function and SQS maximum concurrency 2. The reviewed API runtime/callback update and frontend publication also completed. All five temporary quota, bootstrap, planning, execution and publishing policy attachments are now removed. The non-root profile retains ViewOnlyAccess, SignInLocalDevelopmentAccess and the inline OathwirePreflightRead policy; MFA and temporary credentials remain in use. No root CLI credentials or access keys were created. Authenticated application acceptance is still pending; see [verification](verification.md).
+
+## Initial access snapshot (2026-10-23)
 
 AWS CLI v2.38.5 and SAM CLI v1.170.0 are installed locally. The owner approved creation of IAM user `oathwire-dev` with `ViewOnlyAccess` and `SignInLocalDevelopmentAccess`, then completed password and MFA setup directly in AWS. The console confirmed one MFA device and zero access keys. Browser login completed and STS verified `arn:aws:iam::YOUR_AWS_ACCOUNT_ID:user/oathwire-dev` in account `YOUR_AWS_ACCOUNT_ID`. The local profile defaults to `eu-central-1` and JSON output. Temporary login credentials remain outside the repository.
 

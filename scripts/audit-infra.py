@@ -5,6 +5,7 @@ import os
 import tomllib
 from pathlib import Path
 import yaml
+import cfnlint.api
 from samtranslator.translator.transform import transform
 
 os.environ['AWS_DEFAULT_REGION'] = 'eu-central-1'
@@ -119,12 +120,28 @@ assert len(mapping_reads) == 1
 assert mapping_reads[0]['Condition'] == {'StringEquals': {'aws:RequestedRegion': {'Ref': 'AWS::Region'}}}
 stage_creates = [statement for statement in statements if statement.get('Sid') == 'CreateTaggedHttpApiStage']
 assert len(stage_creates) == 1
-assert stage_creates[0]['Action'] == ['apigateway:POST', 'apigateway:PUT']
+assert stage_creates[0]['Action'] == ['apigateway:POST', 'apigateway:TagResource']
 assert stage_creates[0]['Resource'] == {'Fn::Sub': 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*/stages'}
 assert stage_creates[0]['Condition'] == {'StringEquals': {
     'aws:RequestedRegion': {'Ref': 'AWS::Region'},
     'aws:RequestTag/OathwireStack': {'Ref': 'ApplicationStackName'},
 }}
+assert bootstrap['Resources']['ExecutionRole']['Metadata'] == {'cfn-lint': {'config': {'ignore_checks': ['W3037']}}}
+schema_directory = Path(cfnlint.__file__).parent / 'data' / 'schemas'
+provider_index = json.loads((schema_directory / 'providers' / 'eu-central-1.json').read_text())
+stage_schema = json.loads((schema_directory / 'resources' / (provider_index['AWS::ApiGatewayV2::Stage'] + '.json')).read_text())
+assert 'apigateway:TagResource' in stage_schema['handlers']['create']['permissions']
+unsuppressed = copy.deepcopy(bootstrap)
+unsuppressed['Resources']['ExecutionRole'].pop('Metadata')
+stage_index = statements.index(stage_creates[0])
+expected_path = ['Resources', 'ExecutionRole', 'Properties', 'Policies', 0, 'PolicyDocument', 'Statement', stage_index, 'Action']
+def expected_tagging_warning(selected):
+    findings = cfnlint.api.lint(json.dumps(selected), regions=['eu-central-1'])
+    return len(findings) == 1 and findings[0].rule.id == 'W3037' and findings[0].path == expected_path and findings[0].message.startswith("'tagresource' is not one of")
+assert expected_tagging_warning(unsuppressed), 'Only the provider-declared TagResource catalog conflict is allowed'
+invalid = copy.deepcopy(unsuppressed)
+invalid['Resources']['ExecutionRole']['Properties']['Policies'][0]['PolicyDocument']['Statement'][0]['Action'].append('iam:OathwireInvalidAction')
+assert not expected_tagging_warning(invalid), 'An unrelated invalid action must still fail'
 for statement in statements:
     actions = statement['Action'] if isinstance(statement['Action'], list) else [statement['Action']]
     assert '*' not in actions

@@ -393,7 +393,7 @@ Resources:
                 Condition: { StringEquals: { 'aws:RequestedRegion': !Ref 'AWS::Region' } }
               - Sid: CreateTaggedHttpApiStage
                 Effect: Allow
-                Action: apigateway:POST
+                Action: [apigateway:POST, apigateway:PUT]
                 Resource: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*/stages'
                 Condition:
                   StringEquals:

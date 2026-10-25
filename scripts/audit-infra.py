@@ -119,7 +119,7 @@ assert len(mapping_reads) == 1
 assert mapping_reads[0]['Condition'] == {'StringEquals': {'aws:RequestedRegion': {'Ref': 'AWS::Region'}}}
 stage_creates = [statement for statement in statements if statement.get('Sid') == 'CreateTaggedHttpApiStage']
 assert len(stage_creates) == 1
-assert stage_creates[0]['Action'] == 'apigateway:POST'
+assert stage_creates[0]['Action'] == ['apigateway:POST', 'apigateway:PUT']
 assert stage_creates[0]['Resource'] == {'Fn::Sub': 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*/stages'}
 assert stage_creates[0]['Condition'] == {'StringEquals': {
     'aws:RequestedRegion': {'Ref': 'AWS::Region'},

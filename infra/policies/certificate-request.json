@@ -1,0 +1,60 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RequestOnlyOathwirePublicCertificate",
+      "Effect": "Allow",
+      "Action": "acm:RequestCertificate",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1",
+          "aws:RequestTag/OathwireStack": "oathwire-beta",
+          "acm:ValidationMethod": "DNS",
+          "acm:Export": "DISABLED",
+          "acm:KeyAlgorithm": "RSA_2048",
+          "acm:CertificateKeyPairOrigin": "AWS_MANAGED"
+        },
+        "ForAllValues:StringEquals": {
+          "acm:DomainNames": ["oathwire.zadaks.com"],
+          "aws:TagKeys": ["OathwireStack"]
+        },
+        "Null": {
+          "acm:DomainNames": "false",
+          "acm:CertificateAuthority": "true"
+        }
+      }
+    },
+    {
+      "Sid": "TagOnlyOathwireCertificate",
+      "Effect": "Allow",
+      "Action": "acm:AddTagsToCertificate",
+      "Resource": "arn:aws:acm:us-east-1:${AccountId}:certificate/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1",
+          "aws:RequestTag/OathwireStack": "oathwire-beta"
+        },
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": ["OathwireStack"]
+        },
+        "StringEqualsIfExists": {
+          "aws:ResourceTag/OathwireStack": "oathwire-beta",
+          "acm:CertificateKeyPairOrigin": "AWS_MANAGED"
+        }
+      }
+    },
+    {
+      "Sid": "ReadOnlyOathwireCertificate",
+      "Effect": "Allow",
+      "Action": ["acm:DescribeCertificate", "acm:ListTagsForCertificate"],
+      "Resource": "arn:aws:acm:us-east-1:${AccountId}:certificate/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1",
+          "aws:ResourceTag/OathwireStack": "oathwire-beta"
+        }
+      }
+    }
+  ]
+}

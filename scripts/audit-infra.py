@@ -90,6 +90,21 @@ for resource in template['Resources'].values():
 assert template['Parameters']['ConcurrencyMode']['Default'] == 'reserved'
 assert template['Parameters']['ConcurrencyMode']['AllowedValues'] == ['reserved', 'shared-beta']
 assert template['Conditions']['UseReservedConcurrency'] == {'Fn::Equals': [{'Ref': 'ConcurrencyMode'}, 'reserved']}
+assert template['Parameters']['FrontendDomain']['Default'] == ''
+assert template['Parameters']['FrontendCertificateArn']['Default'] == ''
+distribution = template['Resources']['Distribution']['Properties']['DistributionConfig']
+assert distribution['Aliases'] == {'Fn::If': ['UseFrontendDomain', [{'Ref': 'FrontendDomain'}], {'Ref': 'AWS::NoValue'}]}
+assert distribution['ViewerCertificate'] == {'Fn::If': ['UseFrontendDomain', {
+    'AcmCertificateArn': {'Ref': 'FrontendCertificateArn'},
+    'SslSupportMethod': 'sni-only', 'MinimumProtocolVersion': 'TLSv1.2_2021',
+}, {'Ref': 'AWS::NoValue'}]}
+for supplied, required, rule in (
+    ('FrontendDomain', 'FrontendCertificateArn', 'FrontendDomainCertificate'),
+    ('FrontendCertificateArn', 'FrontendDomain', 'FrontendCertificateDomain'),
+):
+    domain_rule = template['Rules'][rule]
+    assert domain_rule['RuleCondition'] == {'Fn::Not': [{'Fn::Equals': [{'Ref': supplied}, '']}]}
+    assert domain_rule['Assertions'][0]['Assert'] == {'Fn::Not': [{'Fn::Equals': [{'Ref': required}, '']}]}
 for mode in ('reserved', 'shared-beta'):
     selected = copy.deepcopy(template)
     for key in ('Api', 'Worker'):
@@ -166,6 +181,38 @@ for file in Path('infra/policies').glob('*.json'):
             assert statement['Resource'].endswith(':role/oathwire-beta-cloudformation')
             assert statement['Condition']['StringEquals']['iam:PassedToService'] == 'cloudformation.amazonaws.com'
 planner = json.loads(Path('infra/policies/application-planner.json').read_text(encoding='utf-8'))
+certificate = json.loads(Path('infra/policies/certificate-request.json').read_text(encoding='utf-8'))
+certificate_request, certificate_tagging, certificate_read = certificate['Statement']
+assert certificate_request['Action'] == 'acm:RequestCertificate'
+assert certificate_request['Resource'] == '*'
+assert certificate_request['Condition'] == {
+    'StringEquals': {
+        'aws:RequestedRegion': 'us-east-1',
+        'aws:RequestTag/OathwireStack': 'oathwire-beta',
+        'acm:ValidationMethod': 'DNS',
+        'acm:Export': 'DISABLED',
+        'acm:KeyAlgorithm': 'RSA_2048',
+        'acm:CertificateKeyPairOrigin': 'AWS_MANAGED',
+    },
+    'ForAllValues:StringEquals': {
+        'acm:DomainNames': ['oathwire.zadaks.com'], 'aws:TagKeys': ['OathwireStack'],
+    },
+    'Null': {'acm:DomainNames': 'false', 'acm:CertificateAuthority': 'true'},
+}
+assert certificate_tagging['Action'] == 'acm:AddTagsToCertificate'
+assert certificate_tagging['Resource'] == 'arn:aws:acm:us-east-1:${AccountId}:certificate/*'
+assert certificate_tagging['Condition'] == {
+    'StringEquals': {'aws:RequestedRegion': 'us-east-1', 'aws:RequestTag/OathwireStack': 'oathwire-beta'},
+    'ForAllValues:StringEquals': {'aws:TagKeys': ['OathwireStack']},
+    'StringEqualsIfExists': {
+        'aws:ResourceTag/OathwireStack': 'oathwire-beta', 'acm:CertificateKeyPairOrigin': 'AWS_MANAGED',
+    },
+}
+assert certificate_read['Action'] == ['acm:DescribeCertificate', 'acm:ListTagsForCertificate']
+assert certificate_read['Resource'] == certificate_tagging['Resource']
+assert certificate_read['Condition'] == {'StringEquals': {
+    'aws:RequestedRegion': 'us-east-1', 'aws:ResourceTag/OathwireStack': 'oathwire-beta',
+}}
 assert 'cloudformation:ExecuteChangeSet' not in json.dumps(planner)
 assert 'cloudformation:DeleteStack' not in json.dumps(planner)
 assert 's3:DeleteObject' not in json.dumps(planner)

@@ -15,6 +15,16 @@ Parameters:
     Type: String
     Description: Frontend origin, without trailing slash; use http://localhost:5173 for initial stack creation
     Default: http://localhost:5173
+  FrontendDomain:
+    Type: String
+    Default: ''
+    Description: Optional frontend hostname
+    AllowedPattern: '^$|^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$'
+  FrontendCertificateArn:
+    Type: String
+    Default: ''
+    Description: ACM certificate in us-east-1 for the frontend hostname
+    AllowedPattern: '^$|^arn:aws:acm:us-east-1:[0-9]{12}:certificate/[a-f0-9-]{36}$'
   AuthDomainPrefix:
     Type: String
     AllowedPattern: '[a-z0-9-]{1,63}'
@@ -38,6 +48,20 @@ Parameters:
     MaxValue: 1000
 Conditions:
   UseReservedConcurrency: !Equals [!Ref ConcurrencyMode, reserved]
+  UseFrontendDomain: !And
+    - !Not [!Equals [!Ref FrontendDomain, '']]
+    - !Not [!Equals [!Ref FrontendCertificateArn, '']]
+Rules:
+  FrontendDomainCertificate:
+    RuleCondition: !Not [!Equals [!Ref FrontendDomain, '']]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref FrontendCertificateArn, '']]
+        AssertDescription: Provide a certificate ARN with the frontend hostname
+  FrontendCertificateDomain:
+    RuleCondition: !Not [!Equals [!Ref FrontendCertificateArn, '']]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref FrontendDomain, '']]
+        AssertDescription: Provide a frontend hostname with the certificate ARN
 Globals:
   Function:
     Runtime: nodejs24.x
@@ -375,6 +399,13 @@ Resources:
       Tags: [{ Key: OathwireStack, Value: !Ref 'AWS::StackName' }]
       DistributionConfig:
         Enabled: true
+        Aliases: !If [UseFrontendDomain, [!Ref FrontendDomain], !Ref 'AWS::NoValue']
+        ViewerCertificate: !If
+          - UseFrontendDomain
+          - AcmCertificateArn: !Ref FrontendCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - !Ref 'AWS::NoValue'
         DefaultRootObject: index.html
         PriceClass: PriceClass_100
         Origins:
@@ -504,7 +535,11 @@ Resources:
           Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref BudgetEmail }]
 Outputs:
   ApiUrl: { Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com' }
-  WebUrl: { Value: !Sub 'https://${Distribution.DomainName}' }
+  WebUrl:
+    Value: !If
+      - UseFrontendDomain
+      - !Sub 'https://${FrontendDomain}'
+      - !Sub 'https://${Distribution.DomainName}'
   FrontendBucket: { Value: !Ref Frontend }
   DistributionId: { Value: !Ref Distribution }
   UserPoolId: { Value: !Ref UserPool }
